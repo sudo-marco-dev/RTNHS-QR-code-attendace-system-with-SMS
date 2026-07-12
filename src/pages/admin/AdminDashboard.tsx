@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, useNavigate, Link, useLocation } from 'react-router-dom'
+import { Routes, Route, useNavigate, NavLink } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
+import { LayoutDashboard, LogOut } from 'lucide-react'
+import { ThemeToggle } from '../../components/ui/ThemeToggle'
 import SectionManager from '../../components/admin/SectionManager'
 import StudentImport from '../../components/admin/StudentImport'
 import TeacherManager from '../../components/admin/TeacherManager'
@@ -12,7 +13,6 @@ import ScheduleManager from '../../components/admin/ScheduleManager'
 export default function AdminDashboard() {
   const { role } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -50,42 +50,75 @@ export default function AdminDashboard() {
   ]
 
   const SidebarContent = () => (
-    <>
-      <div className="p-6 border-b border-gray-100">
-        <h1 className="text-xl font-bold text-gray-800">RTNHS Admin</h1>
-        <p className="text-xs text-gray-500 mt-0.5">Attendance System</p>
+    <div style={{
+      width: '100%',
+      background: 'var(--sidebar-bg)',
+      display: 'flex',
+      flexDirection: 'column',
+      minHeight: '100vh',
+    }}>
+      {/* Brand header */}
+      <div style={{ padding: '20px 18px 16px', borderBottom: '0.5px solid var(--sidebar-border)' }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--sidebar-text)' }}>
+          RTNHS Admin
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--sidebar-muted)', marginTop: 2 }}>
+          Attendance system
+        </div>
       </div>
-      <nav className="flex-1 mt-4">
+
+      {/* Nav items */}
+      <nav style={{ padding: '10px', flex: 1 }}>
         {navItems.map(item => (
-          <Link
+          <NavLink
             key={item.path}
             to={item.path}
             onClick={() => setIsMobileOpen(false)}
-            className={`flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-              location.pathname.startsWith(item.path)
-                ? 'bg-blue-50 text-blue-700 border-r-4 border-blue-700'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            }`}
+            style={({ isActive }) => ({
+              display: 'flex',
+              alignItems: 'center',
+              gap: 9,
+              padding: '8px 10px',
+              borderRadius: 7,
+              fontSize: 13,
+              marginBottom: 2,
+              textDecoration: 'none',
+              borderLeft: isActive ? '2px solid var(--sidebar-active-border)' : '2px solid transparent',
+              background: isActive ? 'var(--sidebar-active-bg)' : 'transparent',
+              color: isActive ? 'var(--sidebar-active-text)' : 'var(--sidebar-muted)',
+              fontWeight: isActive ? 500 : 400,
+            })}
           >
             {item.name}
-          </Link>
+          </NavLink>
         ))}
       </nav>
-      <div className="p-6 border-t border-gray-100">
-        <button
-          onClick={() => supabase.auth.signOut()}
-          className="w-full px-4 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
-        >
-          Sign Out
+
+      {/* Footer with theme toggle */}
+      <div style={{
+        padding: '12px 18px',
+        borderTop: '0.5px solid var(--sidebar-border)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      }}>
+        <button onClick={() => supabase.auth.signOut()} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: 12, color: 'var(--sidebar-muted)',
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <LogOut className="w-4 h-4 mr-2" />
+          Sign out
         </button>
+        <ThemeToggle />
       </div>
-    </>
+    </div>
   )
 
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden">
+    <div className="min-h-screen flex" style={{ background: 'var(--page-bg)' }}>
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex w-64 flex-col bg-white border-r shadow-sm shrink-0">
+      <aside className="hidden md:flex w-[210px] flex-col shrink-0 border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)]">
         <SidebarContent />
       </aside>
 
@@ -96,7 +129,7 @@ export default function AdminDashboard() {
             className="fixed inset-0 z-40 bg-black/50 md:hidden"
             onClick={() => setIsMobileOpen(false)}
           />
-          <aside className="fixed inset-y-0 left-0 z-50 w-72 flex flex-col bg-white shadow-2xl md:hidden">
+          <aside className="fixed inset-y-0 left-0 z-50 w-[210px] flex flex-col bg-[var(--sidebar-bg)] shadow-2xl md:hidden border-r border-[var(--sidebar-border)]">
             <SidebarContent />
           </aside>
         </>
@@ -105,17 +138,17 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile Top Bar */}
-        <header className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b shadow-sm shrink-0">
+        <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] shrink-0">
           <button
             onClick={() => setIsMobileOpen(true)}
-            className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
+            className="p-2 rounded-lg text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover-bg)]"
             aria-label="Open sidebar"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="font-bold text-gray-800">RTNHS Admin</span>
+          <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--sidebar-text)' }}>RTNHS Admin</span>
           <div className="w-10" />
         </header>
 
@@ -130,29 +163,39 @@ export default function AdminDashboard() {
             {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
-                { label: 'Total Students', value: stats.students, color: 'text-blue-600' },
-                { label: 'Active Sections', value: stats.sections, color: 'text-green-600' },
-                { label: 'Registered Teachers', value: stats.teachers, color: 'text-purple-600' },
+                { label: 'Total Students', value: stats.students },
+                { label: 'Active Sections', value: stats.sections },
+                { label: 'Registered Teachers', value: stats.teachers },
               ].map(s => (
-                <Card key={s.label}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wide">{s.label}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className={`text-3xl font-bold ${s.color}`}>{s.value}</div>
-                  </CardContent>
-                </Card>
+                <div key={s.label} style={{
+                  background: 'var(--stat-secondary-bg)',
+                  border: '0.5px solid var(--card-border)',
+                  borderRadius: 10,
+                  padding: '14px 16px',
+                }}>
+                  <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--stat-secondary-num)' }}>
+                    {s.value}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--stat-secondary-lbl)', marginTop: 2 }}>
+                    {s.label}
+                  </div>
+                </div>
               ))}
             </div>
 
             {/* Dynamic Panel */}
-            <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
+            <div style={{
+              background: 'var(--card-bg)',
+              border: '0.5px solid var(--card-border)',
+              borderRadius: 10,
+              padding: '24px',
+            }}>
               <Routes>
                 <Route path="/" element={
-                  <div className="py-12 text-center text-gray-400">
-                    <div className="text-5xl mb-4">👋</div>
-                    <h3 className="text-lg font-semibold text-gray-600">Welcome to the Admin Dashboard</h3>
-                    <p className="text-sm mt-1">Select an option from the sidebar to get started.</p>
+                  <div className="py-12 text-center flex flex-col items-center">
+                    <LayoutDashboard className="w-16 h-16 mb-4 text-[var(--sidebar-muted)]" />
+                    <h3 style={{ fontSize: 18, fontWeight: 500, color: 'var(--page-title)' }}>Welcome to the Admin Dashboard</h3>
+                    <p style={{ fontSize: 12, color: 'var(--page-sub)', marginTop: 4 }}>Select an option from the sidebar to get started.</p>
                   </div>
                 } />
                 <Route path="sections" element={<SectionManager />} />

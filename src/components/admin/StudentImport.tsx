@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../ui/Button'
-import { Card, CardContent } from '../ui/Card'
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '../ui/Table'
 import { Select } from '../ui/Select'
 
 interface Section {
@@ -23,7 +21,7 @@ export default function StudentImport() {
   const [selectedSection, setSelectedSection] = useState('')
   const [parsedData, setParsedData] = useState<ParsedStudent[]>([])
   const [loading, setLoading] = useState(false)
-  const [status, setStatus] = useState<{ message: string, type: 'info' | 'success' | 'error' } | null>(null)
+  const [status, setStatus] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null)
 
   useEffect(() => {
     const fetchSections = async () => {
@@ -46,8 +44,8 @@ export default function StudentImport() {
           full_name: row.full_name || '',
           lrn: row.lrn || '',
           parent_phone: row.parent_phone || ''
-        })).filter(row => row.full_name && row.lrn) // basic validation
-        
+        })).filter(row => row.full_name && row.lrn)
+
         setParsedData(validRows)
         setStatus({ message: `Successfully parsed ${validRows.length} rows.`, type: 'info' })
       },
@@ -62,13 +60,11 @@ export default function StudentImport() {
       setStatus({ message: 'Please select a section first.', type: 'error' })
       return
     }
-    
     if (parsedData.length === 0) return
 
     setLoading(true)
     setStatus({ message: 'Importing records...', type: 'info' })
 
-    // Generate UUIDs for qr_code based on browser crypto API (v4 UUID)
     const recordsToInsert = parsedData.map(student => ({
       section_id: selectedSection,
       full_name: student.full_name,
@@ -83,79 +79,97 @@ export default function StudentImport() {
       setStatus({ message: `Import failed: ${error.message}`, type: 'error' })
     } else {
       setStatus({ message: `Successfully imported ${recordsToInsert.length} students!`, type: 'success' })
-      setParsedData([]) // clear on success
+      setParsedData([])
     }
-    
     setLoading(false)
   }
 
+  const statusColors = {
+    error:   { color: 'var(--danger-text)', background: 'var(--danger)' },
+    success: { color: '#c3d898', background: '#04471c' },
+    info:    { color: 'var(--body-text)', background: 'var(--card-bg)', border: '0.5px solid var(--card-border)' },
+  }
+
+  const PREVIEW_COL = '2fr 1fr 1fr'
+
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Student Roster Batch Import</h2>
-      
-      <Card>
-        <CardContent className="p-6 space-y-6">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div>
-              <label className="block mb-2 text-sm font-medium">1. Select Target Section</label>
-              <Select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)}>
-                <option value="" disabled>Select a section...</option>
-                {sections.map(s => (
-                  <option key={s.id} value={s.id}>{s.grade_level} - {s.name}</option>
-                ))}
-              </Select>
-            </div>
-            
-            <div>
-              <label className="block mb-2 text-sm font-medium">2. Upload CSV File</label>
-              <input 
-                type="file" 
-                accept=".csv"
-                onChange={handleFileUpload}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              />
-              <p className="mt-1 text-xs text-gray-500">Requires headers: full_name, lrn, parent_phone</p>
-            </div>
+      <h2 style={{ fontSize: 15, fontWeight: 500, color: 'var(--page-title)' }}>Student Roster Batch Import</h2>
+
+      <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, padding: '20px' }}>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>
+              1. Select Target Section
+            </label>
+            <Select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)}>
+              <option value="" disabled>Select a section...</option>
+              {sections.map(s => (
+                <option key={s.id} value={s.id}>{s.grade_level} - {s.name}</option>
+              ))}
+            </Select>
           </div>
 
-          {status && (
-            <div className={`p-4 rounded ${status.type === 'error' ? 'bg-red-100 text-red-700' : status.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-              {status.message}
-            </div>
-          )}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>
+              2. Upload CSV File
+            </label>
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleFileUpload}
+              style={{
+                display: 'block', width: '100%', fontSize: 12,
+                color: 'var(--body-text)',
+              }}
+            />
+            <p style={{ marginTop: 4, fontSize: 11, color: 'var(--muted-text)' }}>
+              Requires headers: full_name, lrn, parent_phone
+            </p>
+          </div>
+        </div>
 
-          {parsedData.length > 0 && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-700">Preview Data ({parsedData.length} rows)</h3>
-                <Button onClick={handleImport} disabled={loading || !selectedSection}>
-                  {loading ? 'Processing...' : 'Confirm & Insert'}
-                </Button>
-              </div>
-              <div className="border rounded-md max-h-96 overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Full Name</TableHead>
-                      <TableHead>LRN</TableHead>
-                      <TableHead>Parent Phone</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {parsedData.map((row, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell>{row.full_name}</TableCell>
-                        <TableCell>{row.lrn}</TableCell>
-                        <TableCell>{row.parent_phone}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+        {status && (
+          <div style={{
+            marginTop: 16, padding: '10px 14px', borderRadius: 8, fontSize: 13,
+            ...(statusColors[status.type] as React.CSSProperties)
+          }}>
+            {status.message}
+          </div>
+        )}
+
+        {parsedData.length > 0 && (
+          <div className="space-y-4" style={{ marginTop: 20 }}>
+            <div className="flex items-center justify-between">
+              <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--page-title)' }}>
+                Preview ({parsedData.length} rows)
+              </h3>
+              <Button onClick={handleImport} disabled={loading || !selectedSection}>
+                {loading ? 'Processing...' : 'Confirm & Insert'}
+              </Button>
             </div>
-          )}
-        </CardContent>
-      </Card>
+
+            <div style={{ maxHeight: 384, overflowY: 'auto', border: '0.5px solid var(--card-border)', borderRadius: 8, overflow: 'hidden' }}>
+              <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: PREVIEW_COL, padding: '9px 14px' }}>
+                {['Full Name', 'LRN', 'Parent Phone'].map(c => (
+                  <span key={c} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>{c}</span>
+                ))}
+              </div>
+              {parsedData.map((row, idx) => (
+                <div key={idx} style={{
+                  display: 'grid', gridTemplateColumns: PREVIEW_COL,
+                  padding: '8px 14px', borderTop: '0.5px solid var(--card-border)',
+                  background: idx % 2 === 1 ? 'var(--row-alt)' : 'transparent',
+                }}>
+                  <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{row.full_name}</span>
+                  <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{row.lrn}</span>
+                  <span style={{ fontSize: 12, color: 'var(--muted-text)' }}>{row.parent_phone}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

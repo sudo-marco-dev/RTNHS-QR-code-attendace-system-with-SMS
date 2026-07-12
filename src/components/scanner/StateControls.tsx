@@ -72,20 +72,20 @@ export default function StateControls({ sectionId, scanWindow, windowType, onWin
     }
   }
 
-  const statusConfig: Record<WindowStatus, { label: string; color: string; ring: string }> = {
-    open: { label: 'OPEN', color: 'bg-green-500', ring: 'ring-green-400' },
-    late: { label: 'LATE', color: 'bg-yellow-500', ring: 'ring-yellow-400' },
-    closed: { label: 'CLOSED', color: 'bg-gray-500', ring: 'ring-gray-500' },
+  const statusConfig: Record<WindowStatus, { label: string; bg: string }> = {
+    open: { label: 'OPEN', bg: 'bg-forest-mid border border-[rgba(195,216,152,0.3)] text-tea' },
+    late: { label: 'LATE', bg: 'bg-[#b35c00] border border-[#ffb366] text-[#fff3e0]' },
+    closed: { label: 'CLOSED', bg: 'bg-transparent border border-[rgba(195,216,152,0.2)] text-muted-on-dark' },
   }
 
   const cfg = statusConfig[status]
 
   return (
-    <div className="p-4 bg-gray-900 border border-gray-700 rounded-xl space-y-4">
+    <div className="p-4 bg-[rgba(195,216,152,0.08)] border border-[rgba(195,216,152,0.2)] rounded-xl space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-gray-400 text-xs uppercase tracking-widest font-semibold">Scan Window</span>
-        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold text-white ${cfg.color} ring-2 ${cfg.ring} ring-opacity-50`}>
-          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+        <span className="text-muted-on-dark text-xs uppercase tracking-widest font-semibold">Scan Window</span>
+        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${cfg.bg}`}>
+          {status !== 'closed' && <span className="w-2 h-2 rounded-full bg-sage animate-pulse mr-2" />}
           {cfg.label}
         </span>
       </div>
@@ -94,7 +94,7 @@ export default function StateControls({ sectionId, scanWindow, windowType, onWin
         {status === 'closed' && !scanWindow && (
           <button
             onClick={openWindow}
-            className="flex-1 py-2.5 px-4 bg-green-700 hover:bg-green-600 active:scale-95 text-white text-sm font-semibold rounded-lg transition-all"
+            className="flex-1 py-2.5 px-4 bg-forest text-tea hover:bg-forest-mid active:scale-95 text-sm font-semibold rounded-lg transition-all"
           >
             Open Window
           </button>
@@ -103,7 +103,7 @@ export default function StateControls({ sectionId, scanWindow, windowType, onWin
         {status === 'open' && (
           <button
             onClick={transitionToLate}
-            className="flex-1 py-2.5 px-4 bg-yellow-700 hover:bg-yellow-600 active:scale-95 text-white text-sm font-semibold rounded-lg transition-all"
+            className="flex-1 py-2.5 px-4 bg-[#b35c00] text-[#fff3e0] hover:bg-[#cc6a00] active:scale-95 text-sm font-semibold rounded-lg transition-all"
           >
             Close → Mark Late
           </button>
@@ -112,7 +112,7 @@ export default function StateControls({ sectionId, scanWindow, windowType, onWin
         {status === 'late' && (
           <button
             onClick={closeWindow}
-            className="flex-1 py-2.5 px-4 bg-red-700 hover:bg-red-600 active:scale-95 text-white text-sm font-semibold rounded-lg transition-all"
+            className="flex-1 py-2.5 px-4 bg-burgundy text-[#f5c0c3] hover:bg-[#8b1a1a] active:scale-95 text-sm font-semibold rounded-lg transition-all"
           >
             Close Window (Batch Absent)
           </button>
@@ -121,7 +121,7 @@ export default function StateControls({ sectionId, scanWindow, windowType, onWin
         {status === 'open' && (
           <button
             onClick={closeWindow}
-            className="flex-1 py-2.5 px-4 bg-gray-700 hover:bg-gray-600 active:scale-95 text-white text-sm font-semibold rounded-lg transition-all"
+            className="flex-1 py-2.5 px-4 bg-burgundy text-[#f5c0c3] hover:bg-[#8b1a1a] active:scale-95 text-sm font-semibold rounded-lg transition-all"
           >
             Force Close
           </button>
@@ -130,8 +130,8 @@ export default function StateControls({ sectionId, scanWindow, windowType, onWin
 
       {/* Window type selector (only when no active window) */}
       {!scanWindow && (
-        <div className="text-xs text-gray-500 text-center">
-          Window type: <span className="text-gray-300 font-semibold">{windowType.replace('_', ' ').toUpperCase()}</span>
+        <div className="text-xs text-muted-on-dark text-center">
+          Window type: <span className="text-tea font-semibold">{windowType.replace('_', ' ').toUpperCase()}</span>
         </div>
       )}
     </div>

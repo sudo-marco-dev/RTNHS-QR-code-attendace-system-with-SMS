@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card'
 import { startOfDay, endOfDay, isWithinInterval } from 'date-fns'
-
-
 
 export default function StatsPanel() {
   const [loading, setLoading] = useState(true)
@@ -83,76 +80,112 @@ export default function StatsPanel() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Dashboard Statistics</h2>
+      <h2 style={{ fontSize: 15, fontWeight: 500, color: 'var(--page-title)' }}>Dashboard Statistics</h2>
       
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-blue-600 text-white border-none shadow-md">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium uppercase opacity-80">Global Attendance Rate</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold">{globalRate}%</div>
-          </CardContent>
-        </Card>
+        {/* Secondary Stat */}
+        <div style={{
+          background: 'var(--stat-secondary-bg)',
+          border: '0.5px solid var(--card-border)',
+          borderRadius: 10,
+          padding: '14px 16px',
+        }}>
+          <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--stat-secondary-num)' }}>
+            {globalRate}%
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--stat-secondary-lbl)', marginTop: 2 }}>
+            GLOBAL ATTENDANCE RATE
+          </div>
+        </div>
         
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 uppercase">Today's Present</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">{todayStats.present}</div>
-          </CardContent>
-        </Card>
+        {/* Primary Stat */}
+        <div style={{
+          background: 'var(--stat-primary-bg)',
+          border: '0.5px solid rgba(195,216,152,0.25)',
+          borderRadius: 10,
+          padding: '14px 16px',
+        }}>
+          <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--stat-primary-num)' }}>
+            {todayStats.present}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--stat-primary-lbl)', marginTop: 2 }}>
+            TODAY'S PRESENT
+          </div>
+        </div>
 
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 uppercase">Today's Late</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-yellow-600">{todayStats.late}</div>
-          </CardContent>
-        </Card>
+        {/* Secondary Stat */}
+        <div style={{
+          background: 'var(--stat-secondary-bg)',
+          border: '0.5px solid var(--card-border)',
+          borderRadius: 10,
+          padding: '14px 16px',
+        }}>
+          <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--stat-secondary-num)' }}>
+            {todayStats.late}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--stat-secondary-lbl)', marginTop: 2 }}>
+            TODAY'S LATE
+          </div>
+        </div>
 
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 uppercase">Today's Absent</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-red-600">{todayStats.absent}</div>
-          </CardContent>
-        </Card>
+        {/* Secondary Stat */}
+        <div style={{
+          background: 'var(--stat-secondary-bg)',
+          border: '0.5px solid var(--card-border)',
+          borderRadius: 10,
+          padding: '14px 16px',
+        }}>
+          <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--stat-secondary-num)' }}>
+            {todayStats.absent}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--stat-secondary-lbl)', marginTop: 2 }}>
+            TODAY'S ABSENT
+          </div>
+        </div>
       </div>
 
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle>Top 5 Absentee Leaderboard (Highest Risk)</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div style={{
+        background: 'var(--card-bg)',
+        border: '0.5px solid var(--card-border)',
+        borderRadius: 10,
+        overflow: 'hidden',
+        marginTop: 24,
+      }}>
+        <div style={{ padding: '16px 20px', borderBottom: '0.5px solid var(--card-border)' }}>
+           <h3 style={{ fontSize: 14, fontWeight: 500, color: 'var(--page-title)' }}>Top 5 Absentee Leaderboard (Highest Risk)</h3>
+        </div>
+        <div style={{ padding: '16px 20px' }}>
           {topAbsentees.length === 0 ? (
-            <div className="text-sm text-gray-500">No absences recorded yet!</div>
+            <div style={{ fontSize: 12, color: 'var(--muted-text)' }}>No absences recorded yet!</div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-2">
               {topAbsentees.map((student, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 border rounded-md bg-gray-50">
+                <div key={idx} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 14px',
+                  border: '0.5px solid var(--card-border)',
+                  borderRadius: 8,
+                  background: 'var(--row-alt)',
+                }}>
                   <div className="flex items-center space-x-4">
-                    <div className="flex items-center justify-center w-8 h-8 font-bold text-red-700 bg-red-100 rounded-full">
+                    <div className="flex items-center justify-center w-8 h-8 font-bold text-[var(--danger-text)] bg-[var(--danger)] rounded-full text-xs">
                       #{idx + 1}
                     </div>
                     <div>
-                      <div className="font-medium">{student.name}</div>
-                      <div className="text-xs text-gray-500">{student.section}</div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--body-text)' }}>{student.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted-text)' }}>{student.section}</div>
                     </div>
                   </div>
                   <div className="flex flex-col items-end">
-                    <span className="text-lg font-bold text-red-600">{student.count}</span>
-                    <span className="text-xs text-gray-500">absences</span>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--danger-text)' }}>{student.count}</span>
+                    <span style={{ fontSize: 11, color: 'var(--muted-text)' }}>absences</span>
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   )
 }

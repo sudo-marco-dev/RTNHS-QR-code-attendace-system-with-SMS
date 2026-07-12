@@ -3,8 +3,6 @@ import { createClient } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
-import { Card, CardContent } from '../ui/Card'
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '../ui/Table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
 
 interface Profile {
@@ -98,59 +96,53 @@ export default function TeacherManager() {
     setLoading(false)
   }
 
+  const COLS = ['Name', 'Email Address', 'Created At']
+  const COL_TEMPLATE = '2fr 2fr 1fr'
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Teacher Management</h2>
+        <h2 style={{ fontSize: 15, fontWeight: 500, color: 'var(--page-title)' }}>Teacher Management</h2>
         <Button onClick={() => setIsAddOpen(true)}>Add Teacher</Button>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email Address</TableHead>
-                <TableHead>Created At</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {teachers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="py-8 text-center text-gray-500">No teachers found.</TableCell>
-                </TableRow>
-              ) : (
-                teachers.map((t) => (
-                  <TableRow key={t.id}>
-                    <TableCell className="font-medium">{t.full_name}</TableCell>
-                    <TableCell>{t.email}</TableCell>
-                    <TableCell>{new Date(t.created_at).toLocaleDateString()}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: COL_TEMPLATE, padding: '9px 16px' }}>
+          {COLS.map(c => <span key={c} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>{c}</span>)}
+        </div>
+        {teachers.length === 0 ? (
+          <div style={{ padding: '32px', textAlign: 'center', fontSize: 13, color: 'var(--muted-text)' }}>No teachers found.</div>
+        ) : teachers.map((t, idx) => (
+          <div key={t.id} style={{
+            display: 'grid', gridTemplateColumns: COL_TEMPLATE,
+            padding: '9px 16px', alignItems: 'center',
+            borderTop: '0.5px solid var(--card-border)',
+            background: idx % 2 === 1 ? 'var(--row-alt)' : 'transparent',
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--body-text)' }}>{t.full_name}</span>
+            <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{t.email}</span>
+            <span style={{ fontSize: 12, color: 'var(--muted-text)' }}>{new Date(t.created_at).toLocaleDateString()}</span>
+          </div>
+        ))}
+      </div>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Register New Teacher</DialogTitle>
           </DialogHeader>
-          {error && <div className="p-3 text-sm text-red-600 bg-red-100 rounded">{error}</div>}
+          {error && <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--danger-text)', background: 'var(--danger)', borderRadius: 7 }}>{error}</div>}
           <form onSubmit={handleAddTeacher} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium">Full Name</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>Full Name</label>
               <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Jane Doe" />
             </div>
             <div>
-              <label className="block text-sm font-medium">Email Address</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>Email Address</label>
               <Input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@rtnhs.edu.ph" />
             </div>
             <div>
-              <label className="block text-sm font-medium">Temporary Password</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>Temporary Password</label>
               <Input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} placeholder="Min 6 characters" />
             </div>
             <div className="flex justify-end pt-4 space-x-2">

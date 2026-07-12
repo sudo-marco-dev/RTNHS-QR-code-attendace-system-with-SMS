@@ -5,6 +5,7 @@ import CameraStream from '../../components/scanner/CameraStream'
 import StateControls from '../../components/scanner/StateControls'
 import type { ScanWindow, WindowType } from '../../components/scanner/StateControls'
 import { playSuccess, playDuplicate, playError } from '../../components/scanner/AudioFeedback'
+import { Zap } from 'lucide-react'
 
 interface Student {
   id: string
@@ -184,11 +185,11 @@ export default function ScannerTerminal() {
   }
 
   const statusStyles: Record<string, string> = {
-    PRESENT: 'bg-green-900 border-green-500 text-green-200',
-    LATE: 'bg-yellow-900 border-yellow-500 text-yellow-200',
-    ABSENT: 'bg-red-900 border-red-500 text-red-200',
-    DUPLICATE: 'bg-blue-900 border-blue-500 text-blue-200',
-    ERROR: 'bg-gray-900 border-red-700 text-red-300'
+    PRESENT: 'text-tea border-l-2 border-tea',
+    LATE: 'text-[#ffd166] border-l-2 border-[#ffd166]',
+    ABSENT: 'text-[#f5c0c3] border-l-2 border-burgundy',
+    DUPLICATE: 'text-[#ffd166] border-l-2 border-[#ffd166]',
+    ERROR: 'text-[#f5c0c3] border-l-2 border-burgundy'
   }
 
   if (phase === 'pin') {
@@ -204,12 +205,12 @@ export default function ScannerTerminal() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+    <div className="min-h-screen bg-evergreen text-text-on-dark flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 bg-gray-900 border-b border-gray-800">
+      <header className="flex items-center justify-between px-6 py-4 bg-evergreen border-b border-[rgba(195,216,152,0.2)]">
         <div>
-          <h1 className="text-lg font-bold">RTNHS Scanner</h1>
-          <p className="text-sm text-gray-400">{sectionName}</p>
+          <h1 className="text-tea text-4xl font-medium tracking-wide">RTNHS Scanner</h1>
+          <p className="text-sm text-muted-on-dark mt-1">{sectionName}</p>
         </div>
         <div className="flex items-center gap-4">
           {offlineQueue.length > 0 && (
@@ -220,7 +221,7 @@ export default function ScannerTerminal() {
           )}
           <button
             onClick={() => { setPhase('pin'); setSectionId(''); setSectionName(''); setStudents([]); setScanWindow(null); setScannedIds(new Set()) }}
-            className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            className="text-xs text-muted-on-dark hover:text-tea transition-colors"
           >
             Change Section
           </button>
@@ -240,8 +241,8 @@ export default function ScannerTerminal() {
                   onClick={() => setWindowType(t)}
                   className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-all ${
                     windowType === t
-                      ? 'bg-blue-700 border-blue-500 text-white'
-                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500'
+                      ? 'bg-forest-mid border-[rgba(195,216,152,0.3)] text-tea'
+                      : 'bg-transparent border-[rgba(195,216,152,0.2)] text-muted-on-dark hover:border-[rgba(195,216,152,0.3)]'
                   }`}
                 >
                   {t === 'morning_in' ? 'Morning IN' : t === 'afternoon_in' ? 'Afternoon IN' : 'Afternoon OUT'}
@@ -254,11 +255,11 @@ export default function ScannerTerminal() {
 
           {/* Feedback Card */}
           {feedback && (
-            <div className={`p-4 border rounded-xl transition-all duration-300 ${statusStyles[feedback.status]}`}>
+            <div className={`p-4 border border-[rgba(195,216,152,0.2)] bg-[rgba(195,216,152,0.08)] rounded-xl transition-all duration-300 ${statusStyles[feedback.status]}`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-lg font-bold">{feedback.studentName}</div>
-                  <div className="text-sm opacity-70">LRN: {feedback.lrn}</div>
+                  <div className="text-lg font-medium text-text-on-dark">{feedback.studentName}</div>
+                  <div className="text-sm text-muted-on-dark">LRN: {feedback.lrn}</div>
                   <div className="text-sm mt-1">{feedback.message}</div>
                 </div>
                 <div className={`text-2xl font-extrabold tracking-widest`}>
@@ -281,23 +282,23 @@ export default function ScannerTerminal() {
 
           {/* Scan stats */}
           <div className="grid grid-cols-3 gap-3">
-            <div className="p-3 bg-gray-900 border border-gray-700 rounded-xl text-center">
-              <div className="text-2xl font-bold text-green-400">{scannedIds.size}</div>
-              <div className="text-xs text-gray-500 mt-1">Scanned</div>
+            <div className="p-3 bg-[rgba(195,216,152,0.08)] border border-[rgba(195,216,152,0.2)] rounded-xl text-center">
+              <div className="text-2xl font-bold text-tea">{scannedIds.size}</div>
+              <div className="text-xs text-muted-on-dark mt-1">Scanned</div>
             </div>
-            <div className="p-3 bg-gray-900 border border-gray-700 rounded-xl text-center">
-              <div className="text-2xl font-bold text-gray-300">{students.length - scannedIds.size}</div>
-              <div className="text-xs text-gray-500 mt-1">Remaining</div>
+            <div className="p-3 bg-[rgba(195,216,152,0.08)] border border-[rgba(195,216,152,0.2)] rounded-xl text-center">
+              <div className="text-2xl font-bold text-tea">{students.length - scannedIds.size}</div>
+              <div className="text-xs text-muted-on-dark mt-1">Remaining</div>
             </div>
-            <div className="p-3 bg-gray-900 border border-gray-700 rounded-xl text-center">
-              <div className="text-2xl font-bold text-blue-400">{students.length}</div>
-              <div className="text-xs text-gray-500 mt-1">Total</div>
+            <div className="p-3 bg-[rgba(195,216,152,0.08)] border border-[rgba(195,216,152,0.2)] rounded-xl text-center">
+              <div className="text-2xl font-bold text-tea">{students.length}</div>
+              <div className="text-xs text-muted-on-dark mt-1">Total</div>
             </div>
           </div>
 
           {/* Manual LRN Entry */}
-          <form onSubmit={handleManualSubmit} className="p-4 bg-gray-900 border border-gray-700 rounded-xl space-y-3">
-            <label className="block text-xs uppercase tracking-widest text-gray-400 font-semibold">
+          <form onSubmit={handleManualSubmit} className="p-4 bg-[rgba(195,216,152,0.08)] border border-[rgba(195,216,152,0.2)] rounded-xl space-y-3">
+            <label className="block text-xs uppercase tracking-widest text-muted-on-dark font-semibold">
               Manual LRN Entry
             </label>
             <div className="flex gap-2">
@@ -306,11 +307,11 @@ export default function ScannerTerminal() {
                 value={manualLrn}
                 onChange={e => setManualLrn(e.target.value)}
                 placeholder="Type or paste student LRN..."
-                className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                className="flex-1 px-3 py-2 bg-transparent border border-[rgba(195,216,152,0.3)] rounded-lg text-sm text-text-on-dark focus:outline-none focus:border-tea placeholder:text-muted-on-dark"
               />
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-700 hover:bg-blue-600 rounded-lg text-sm font-semibold transition-colors"
+                className="px-4 py-2 bg-forest hover:bg-forest-mid text-tea rounded-lg text-sm font-semibold transition-colors"
               >
                 Submit
               </button>
@@ -320,22 +321,22 @@ export default function ScannerTerminal() {
           {/* Simulate Scan */}
           <button
             onClick={handleSimulateScan}
-            className="w-full py-3 bg-purple-800 hover:bg-purple-700 active:scale-95 border border-purple-600 rounded-xl font-semibold tracking-wide transition-all"
+            className="w-full py-3 bg-forest hover:bg-forest-mid active:scale-95 border border-[rgba(195,216,152,0.3)] rounded-xl font-semibold tracking-wide transition-all flex justify-center items-center gap-2 text-tea"
           >
-            ⚡ Simulate Scan
+            <Zap className="w-5 h-5 text-tea fill-tea" /> Simulate Scan
           </button>
 
           {/* Student roster preview */}
-          <div className="p-4 bg-gray-900 border border-gray-700 rounded-xl">
-            <div className="text-xs uppercase tracking-widest text-gray-400 font-semibold mb-3">
+          <div className="p-4 bg-[rgba(195,216,152,0.08)] border border-[rgba(195,216,152,0.2)] rounded-xl">
+            <div className="text-xs uppercase tracking-widest text-muted-on-dark font-semibold mb-3">
               Section Roster ({students.length})
             </div>
             <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
               {students.map(s => (
-                <div key={s.id} className="flex items-center justify-between py-1.5 px-2 rounded-md bg-gray-800/60">
-                  <div className="text-sm truncate">{s.full_name}</div>
+                <div key={s.id} className="flex items-center justify-between py-1.5 px-2 rounded-md bg-transparent border border-[rgba(195,216,152,0.1)]">
+                  <div className="text-sm truncate text-text-on-dark">{s.full_name}</div>
                   <div className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
-                    scannedIds.has(s.id) ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-400'
+                    scannedIds.has(s.id) ? 'bg-forest text-tea border-none' : 'text-muted-on-dark'
                   }`}>
                     {scannedIds.has(s.id) ? '✓' : '—'}
                   </div>

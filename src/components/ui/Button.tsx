@@ -14,12 +14,12 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(
           "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
           {
-            "bg-primary text-primary-foreground hover:bg-primary/90": variant === "default",
-            "bg-destructive text-destructive-foreground hover:bg-destructive/90": variant === "destructive",
-            "border border-input bg-background hover:bg-accent hover:text-accent-foreground": variant === "outline",
-            "bg-secondary text-secondary-foreground hover:bg-secondary/80": variant === "secondary",
-            "hover:bg-accent hover:text-accent-foreground": variant === "ghost",
-            "text-primary underline-offset-4 hover:underline": variant === "link",
+            "bg-[#04471c] text-[#c3d898] hover:bg-[#0a5c24] border-transparent": variant === "default",
+            "bg-[#70161e] text-[#f5c0c3] hover:bg-[#8b1a1a] border-transparent": variant === "destructive",
+            "bg-transparent border-[var(--sidebar-border)] text-[var(--body-text)] hover:bg-[var(--row-alt)]": variant === "outline",
+            "bg-transparent border border-[#7ea16b] text-[#04471c] dark:text-[#c3d898] hover:bg-[var(--row-alt)]": variant === "secondary",
+            "bg-transparent text-[var(--body-text)] hover:bg-[var(--row-alt)] border-transparent": variant === "ghost",
+            "text-[#04471c] underline-offset-4 hover:underline border-transparent": variant === "link",
             "h-10 px-4 py-2": size === "default",
             "h-9 rounded-md px-3": size === "sm",
             "h-11 rounded-md px-8": size === "lg",

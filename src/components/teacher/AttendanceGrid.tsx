@@ -1,11 +1,12 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { Card, CardContent } from '../ui/Card'
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '../ui/Table'
+import { AttendanceBadge } from '../ui/AttendanceBadge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/Tabs'
 import { Button } from '../ui/Button'
 import { startOfDay, endOfDay, isWithinInterval, startOfWeek, addDays, format, isSameDay } from 'date-fns'
 import { transformLogsToExportRows, downloadCsv } from '../../lib/exportFormatter'
+import { ClipboardList, Calendar, BarChart3, AlertTriangle, Download } from 'lucide-react'
 
 interface LogEntry {
   status: string
@@ -113,21 +114,21 @@ export default function AttendanceGrid() {
   }
 
   const renderBadge = (status: string | undefined) => {
-    if (status === 'PRESENT') return <span className="px-2 py-0.5 text-xs font-semibold text-green-800 bg-green-100 rounded-full">Present</span>
-    if (status === 'LATE') return <span className="px-2 py-0.5 text-xs font-semibold text-yellow-800 bg-yellow-100 rounded-full">Late</span>
-    if (status === 'ABSENT') return <span className="px-2 py-0.5 text-xs font-semibold text-red-800 bg-red-100 rounded-full">Absent</span>
-    return <span className="text-gray-300 text-xs">—</span>
+    if (status === 'PRESENT') return <AttendanceBadge status="PRESENT" />
+    if (status === 'LATE') return <AttendanceBadge status="LATE" />
+    if (status === 'ABSENT') return <AttendanceBadge status="ABSENT" />
+    return <span style={{ fontSize: 11, color: 'var(--muted-text)' }}>—</span>
   }
 
   if (loading) return <div className="py-8 text-center text-gray-500">Loading attendance data...</div>
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Attendance Analytics</h2>
+      <h2 style={{ fontSize: 15, fontWeight: 500, color: 'var(--page-title)' }}>Attendance Analytics</h2>
 
       {fetchError && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-          ⚠️ {fetchError}
+        <div style={{ padding: '16px', background: 'var(--row-alt)', border: '0.5px solid var(--danger)', borderRadius: 10, fontSize: 13, color: 'var(--danger-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <AlertTriangle className="w-4 h-4" /> {fetchError}
         </div>
       )}
 
@@ -151,36 +152,38 @@ export default function AttendanceGrid() {
                 />
               </div>
               <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Time Scanned</TableHead>
-                      <TableHead>Student Name</TableHead>
-                      <TableHead>Section</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dailyLogs.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={4} className="py-12 text-center">
-                          <div className="text-3xl mb-2">📋</div>
-                          <div className="text-gray-500 font-medium">No logs for this date.</div>
-                          <div className="text-xs text-gray-400 mt-1">Try selecting a different date.</div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      dailyLogs.map((log, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell className="whitespace-nowrap">{format(new Date(log.scanned_at), 'hh:mm a')}</TableCell>
-                          <TableCell className="font-medium">{log.student.full_name}</TableCell>
-                          <TableCell className="whitespace-nowrap">{log.student.sections.grade_level} {log.student.sections.name}</TableCell>
-                          <TableCell>{renderBadge(log.status)}</TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, overflow: 'hidden', minWidth: 600 }}>
+                  <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: '1fr 2fr 1fr 1fr', padding: '9px 14px' }}>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Time Scanned</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Student Name</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Section</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Status</span>
+                  </div>
+
+                  {dailyLogs.length === 0 ? (
+                    <div style={{ padding: '48px', textAlign: 'center' }}>
+                      <ClipboardList className="w-12 h-12 mx-auto mb-2 text-[var(--sidebar-muted)]" />
+                      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--body-text)' }}>No logs for this date.</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted-text)', marginTop: 4 }}>Try selecting a different date.</div>
+                    </div>
+                  ) : (
+                    dailyLogs.map((log, idx) => (
+                      <div key={idx} style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 2fr 1fr 1fr',
+                        padding: '9px 14px',
+                        borderTop: '0.5px solid var(--card-border)',
+                        background: idx % 2 === 1 ? 'var(--row-alt)' : 'transparent',
+                        alignItems: 'center',
+                      }}>
+                        <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{format(new Date(log.scanned_at), 'hh:mm a')}</span>
+                        <span style={{ fontSize: 12, color: 'var(--body-text)', fontWeight: 500 }}>{log.student.full_name}</span>
+                        <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{log.student.sections.grade_level} {log.student.sections.name}</span>
+                        <span>{renderBadge(log.status)}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -190,44 +193,47 @@ export default function AttendanceGrid() {
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Student</TableHead>
-                      <TableHead>Section</TableHead>
-                      {weeklyHeaders.map(day => (
-                        <TableHead key={day.toISOString()} className="text-center whitespace-nowrap">
-                          {format(day, 'EEE MM/dd')}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {weeklyData.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="py-12 text-center">
-                          <div className="text-3xl mb-2">📅</div>
-                          <div className="text-gray-500 font-medium">No scans recorded this week.</div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      weeklyData.map((row, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell className="font-medium whitespace-nowrap">{row.name}</TableCell>
-                          <TableCell className="text-sm text-gray-500 whitespace-nowrap">{row.section}</TableCell>
-                          {weeklyHeaders.map(day => {
-                            const dateKey = format(day, 'yyyy-MM-dd')
-                            return (
-                              <TableCell key={dateKey} className="text-center">
-                                {renderBadge(row.logs[dateKey])}
-                              </TableCell>
-                            )
-                          })}
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, overflow: 'hidden', minWidth: 800 }}>
+                  <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr', padding: '9px 14px', gap: '8px' }}>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Student</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Section</span>
+                    {weeklyHeaders.map(day => (
+                      <span key={day.toISOString()} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)', textAlign: 'center' }}>
+                        {format(day, 'EEE MM/dd')}
+                      </span>
+                    ))}
+                  </div>
+
+                  {weeklyData.length === 0 ? (
+                    <div style={{ padding: '48px', textAlign: 'center' }}>
+                      <Calendar className="w-12 h-12 mx-auto mb-2 text-[var(--sidebar-muted)]" />
+                      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--body-text)' }}>No scans recorded this week.</div>
+                    </div>
+                  ) : (
+                    weeklyData.map((row, idx) => (
+                      <div key={idx} style={{
+                        display: 'grid',
+                        gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr',
+                        padding: '9px 14px',
+                        gap: '8px',
+                        borderTop: '0.5px solid var(--card-border)',
+                        background: idx % 2 === 1 ? 'var(--row-alt)' : 'transparent',
+                        alignItems: 'center',
+                      }}>
+                        <span style={{ fontSize: 12, color: 'var(--body-text)', fontWeight: 500 }}>{row.name}</span>
+                        <span style={{ fontSize: 12, color: 'var(--muted-text)' }}>{row.section}</span>
+                        {weeklyHeaders.map(day => {
+                          const dateKey = format(day, 'yyyy-MM-dd')
+                          return (
+                            <span key={dateKey} style={{ textAlign: 'center' }}>
+                              {renderBadge(row.logs[dateKey])}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -238,43 +244,45 @@ export default function AttendanceGrid() {
             <CardContent className="p-4 md:p-6 space-y-4">
               <div className="flex flex-wrap justify-between items-center gap-3">
                 <p className="text-sm text-gray-500">Research-ready CSV with arrival times and window types.</p>
-                <Button onClick={handleExportCsv} variant="outline">
-                  ↓ Download CSV
+                <Button onClick={handleExportCsv} variant="outline" className="flex items-center gap-2">
+                  <Download className="w-4 h-4" /> Download CSV
                 </Button>
               </div>
               <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Student Name</TableHead>
-                      <TableHead>Section</TableHead>
-                      <TableHead className="text-center text-green-700">Present</TableHead>
-                      <TableHead className="text-center text-yellow-700">Late</TableHead>
-                      <TableHead className="text-center text-red-700">Absent</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {monthlyData.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="py-12 text-center">
-                          <div className="text-3xl mb-2">📊</div>
-                          <div className="text-gray-500 font-medium">No attendance data to aggregate yet.</div>
-                          <div className="text-xs text-gray-400 mt-1">Logs will appear once students start scanning in.</div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      monthlyData.map((row, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell className="font-medium">{row.name}</TableCell>
-                          <TableCell>{row.section}</TableCell>
-                          <TableCell className="text-center font-bold text-green-700">{row.present}</TableCell>
-                          <TableCell className="text-center font-bold text-yellow-700">{row.late}</TableCell>
-                          <TableCell className="text-center font-bold text-red-700">{row.absent}</TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, overflow: 'hidden', minWidth: 600 }}>
+                  <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', padding: '9px 14px' }}>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Student Name</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Section</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)', textAlign: 'center' }}>Present</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)', textAlign: 'center' }}>Late</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)', textAlign: 'center' }}>Absent</span>
+                  </div>
+
+                  {monthlyData.length === 0 ? (
+                    <div style={{ padding: '48px', textAlign: 'center' }}>
+                      <BarChart3 className="w-12 h-12 mx-auto mb-2 text-[var(--sidebar-muted)]" />
+                      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--body-text)' }}>No attendance data to aggregate yet.</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted-text)', marginTop: 4 }}>Logs will appear once students start scanning in.</div>
+                    </div>
+                  ) : (
+                    monthlyData.map((row, idx) => (
+                      <div key={idx} style={{
+                        display: 'grid',
+                        gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
+                        padding: '9px 14px',
+                        borderTop: '0.5px solid var(--card-border)',
+                        background: idx % 2 === 1 ? 'var(--row-alt)' : 'transparent',
+                        alignItems: 'center',
+                      }}>
+                        <span style={{ fontSize: 12, color: 'var(--body-text)', fontWeight: 500 }}>{row.name}</span>
+                        <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{row.section}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)', textAlign: 'center' }}>{row.present}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#b35c00', textAlign: 'center' }}>{row.late}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--danger)', textAlign: 'center' }}>{row.absent}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>

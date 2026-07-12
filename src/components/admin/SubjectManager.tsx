@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
-import { Card, CardContent } from '../ui/Card'
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '../ui/Table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
 
 interface Subject {
@@ -16,7 +14,7 @@ export default function SubjectManager() {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  
+
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -34,11 +32,8 @@ export default function SubjectManager() {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    
-    const { error: insertError } = await supabase.from('subjects').insert({
-      name,
-      code
-    })
+
+    const { error: insertError } = await supabase.from('subjects').insert({ name, code })
 
     if (insertError) {
       setError(insertError.message)
@@ -51,53 +46,49 @@ export default function SubjectManager() {
     setLoading(false)
   }
 
+  const COL_TEMPLATE = '1fr 3fr'
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Subjects Overview</h2>
+        <h2 style={{ fontSize: 15, fontWeight: 500, color: 'var(--page-title)' }}>Subjects</h2>
         <Button onClick={() => setIsAddOpen(true)}>Add Subject</Button>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Subject Code</TableHead>
-                <TableHead>Subject Name</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {subjects.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={2} className="py-8 text-center text-gray-500">No subjects found.</TableCell>
-                </TableRow>
-              ) : (
-                subjects.map((sub) => (
-                  <TableRow key={sub.id}>
-                    <TableCell className="font-medium">{sub.code}</TableCell>
-                    <TableCell>{sub.name}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: COL_TEMPLATE, padding: '9px 16px' }}>
+          {['Subject Code', 'Subject Name'].map(c => (
+            <span key={c} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>{c}</span>
+          ))}
+        </div>
+        {subjects.length === 0 ? (
+          <div style={{ padding: '32px', textAlign: 'center', fontSize: 13, color: 'var(--muted-text)' }}>No subjects found.</div>
+        ) : subjects.map((sub, idx) => (
+          <div key={sub.id} style={{
+            display: 'grid', gridTemplateColumns: COL_TEMPLATE,
+            padding: '9px 16px', alignItems: 'center',
+            borderTop: '0.5px solid var(--card-border)',
+            background: idx % 2 === 1 ? 'var(--row-alt)' : 'transparent',
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--body-text)' }}>{sub.code}</span>
+            <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{sub.name}</span>
+          </div>
+        ))}
+      </div>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Subject</DialogTitle>
           </DialogHeader>
-          {error && <div className="p-3 text-sm text-red-600 bg-red-100 rounded">{error}</div>}
+          {error && <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--danger-text)', background: 'var(--danger)', borderRadius: 7 }}>{error}</div>}
           <form onSubmit={handleAddSubject} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium">Subject Name</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>Subject Name</label>
               <Input required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mathematics" />
             </div>
             <div>
-              <label className="block text-sm font-medium">Subject Code</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>Subject Code</label>
               <Input required value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. MATH101" />
             </div>
             <div className="flex justify-end pt-4 space-x-2">
