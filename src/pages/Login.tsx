@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -9,11 +9,19 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
-  const { role } = useAuth()
+  const { role, user, loading: authLoading, authError } = useAuth()
 
   // Redirect if already logged in based on role
-  if (role === 'admin') navigate('/admin')
-  if (role === 'teacher') navigate('/teacher')
+
+  useEffect(() => {
+    if (role === 'admin') {
+      navigate('/admin')
+    } else if (role === 'teacher') {
+      navigate('/teacher')
+    } else if (user && !authLoading && role === null) {
+      setError(`Permission Error: Your account lacks proper permissions. (DB Error: ${authError || 'Profile not found'})`)
+    }
+  }, [role, user, authLoading, authError, navigate])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -9,6 +9,7 @@ interface AuthContextType {
   user: User | null
   role: Role
   loading: boolean
+  authError: string | null
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -16,6 +17,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   role: null,
   loading: true,
+  authError: null,
 })
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -23,6 +25,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
   const [role, setRole] = useState<Role>(null)
   const [loading, setLoading] = useState(true)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -57,14 +60,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     if (data && !error) {
       setRole(data.role as Role)
+      setAuthError(null)
     } else {
+      console.error("Failed to fetch role:", error)
+      setAuthError(error?.message || "Failed to fetch role data")
       setRole(null)
     }
     setLoading(false)
   }
 
   return (
-    <AuthContext.Provider value={{ session, user, role, loading }}>
+    <AuthContext.Provider value={{ session, user, role, loading, authError }}>
       {children}
     </AuthContext.Provider>
   )

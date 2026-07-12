@@ -56,7 +56,7 @@ CREATE TABLE teacher_assignments (
 CREATE TABLE scan_windows (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     section_id UUID NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
-    opened_by UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    opened_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
     window_type window_type_enum NOT NULL,
     status window_status_enum NOT NULL DEFAULT 'open',
     opened_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -90,10 +90,20 @@ ALTER TABLE attendance_logs ENABLE ROW LEVEL SECURITY;
 
 -- Helpers
 
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles 
+    WHERE id = auth.uid() AND role = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- 1. Profiles
 CREATE POLICY "Admins have full access to profiles"
     ON profiles FOR ALL
-    USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+    USING (public.is_admin());
 
 CREATE POLICY "Users can read their own profile"
     ON profiles FOR SELECT
@@ -102,7 +112,7 @@ CREATE POLICY "Users can read their own profile"
 -- 2. Sections
 CREATE POLICY "Admins have full access to sections"
     ON sections FOR ALL
-    USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+    USING (public.is_admin());
 
 CREATE POLICY "Teachers can read assigned sections"
     ON sections FOR SELECT
@@ -121,7 +131,7 @@ CREATE POLICY "Scanners can read section if session claims match (anon/custom)"
 -- 3. Students
 CREATE POLICY "Admins have full access to students"
     ON students FOR ALL
-    USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+    USING (public.is_admin());
 
 CREATE POLICY "Teachers can read students in assigned sections"
     ON students FOR SELECT
@@ -140,7 +150,7 @@ CREATE POLICY "Scanners can read students (public for scan validation)"
 -- 4. Subjects
 CREATE POLICY "Admins have full access to subjects"
     ON subjects FOR ALL
-    USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+    USING (public.is_admin());
 
 CREATE POLICY "Teachers can read subjects"
     ON subjects FOR SELECT
@@ -149,7 +159,7 @@ CREATE POLICY "Teachers can read subjects"
 -- 5. Teacher Assignments
 CREATE POLICY "Admins have full access to teacher_assignments"
     ON teacher_assignments FOR ALL
-    USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+    USING (public.is_admin());
 
 CREATE POLICY "Teachers can read their own assignments"
     ON teacher_assignments FOR SELECT
@@ -158,7 +168,7 @@ CREATE POLICY "Teachers can read their own assignments"
 -- 6. Scan Windows
 CREATE POLICY "Admins have full access to scan_windows"
     ON scan_windows FOR ALL
-    USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+    USING (public.is_admin());
 
 CREATE POLICY "Teachers can manage scan windows for their assigned sections"
     ON scan_windows FOR ALL
@@ -174,10 +184,19 @@ CREATE POLICY "Scanners can read scan_windows"
     ON scan_windows FOR SELECT
     USING (true); -- Required to validate if a window is open before logging attendance
 
+CREATE POLICY "Scanners can insert scan_windows"
+    ON scan_windows FOR INSERT
+    WITH CHECK (true); -- Scanner station opens the window (no auth session)
+
+CREATE POLICY "Scanners can update scan_windows"
+    ON scan_windows FOR UPDATE
+    USING (true)
+    WITH CHECK (true); -- Scanner station updates status (late/closed)
+
 -- 7. Attendance Logs
 CREATE POLICY "Admins have full access to attendance_logs"
     ON attendance_logs FOR ALL
-    USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+    USING (public.is_admin());
 
 CREATE POLICY "Teachers can read attendance logs for assigned sections"
     ON attendance_logs FOR SELECT

@@ -1,6 +1,9 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Login from './pages/Login'
+import AdminDashboard from './pages/admin/AdminDashboard'
+import TeacherDashboard from './pages/teacher/TeacherDashboard'
+import ScannerTerminal from './pages/scanner/ScannerTerminal'
 
 // Protected Route Components
 const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
@@ -26,7 +29,7 @@ function AppRoutes() {
         path="/admin/*" 
         element={
           <ProtectedAdminRoute>
-            <div>Admin Dashboard Placeholder</div>
+            <AdminDashboard />
           </ProtectedAdminRoute>
         } 
       />
@@ -35,12 +38,12 @@ function AppRoutes() {
         path="/teacher/*" 
         element={
           <ProtectedTeacherRoute>
-            <div>Teacher Dashboard Placeholder</div>
+            <TeacherDashboard />
           </ProtectedTeacherRoute>
         } 
       />
       
-      <Route path="/scanner" element={<div>Scanner PIN Page Placeholder</div>} />
+      <Route path="/scanner" element={<ScannerTerminal />} />
       
       {/* Default redirect to login */}
       <Route path="*" element={<Navigate to="/login" replace />} />
