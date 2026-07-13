@@ -18,7 +18,8 @@ export const Tabs = ({ defaultValue, className, children }: { defaultValue: stri
 };
 
 export const TabsList = ({ className, children }: { className?: string; children: React.ReactNode }) => (
-  <div className={cn("inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground", className)}>
+  <div className={cn("inline-flex h-10 items-center justify-center rounded-md p-1", className)}
+    style={{ background: 'var(--row-alt)', border: '0.5px solid var(--card-border)' }}>
     {children}
   </div>
 );
@@ -30,11 +31,16 @@ export const TabsTrigger = ({ value, className, children }: { value: string; cla
     <button
       type="button"
       onClick={() => ctx?.setActiveTab(value)}
-      className={cn(
-        "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-        isActive ? "bg-background text-foreground shadow-sm" : "",
-        className
-      )}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        whiteSpace: 'nowrap', borderRadius: 6, padding: '5px 14px',
+        fontSize: 13, fontWeight: isActive ? 500 : 400,
+        border: 'none', cursor: 'pointer',
+        transition: 'all 0.15s',
+        background: isActive ? 'var(--primary)' : 'transparent',
+        color: isActive ? 'var(--primary-text)' : 'var(--muted-text)',
+      }}
+      className={className}
     >
       {children}
     </button>

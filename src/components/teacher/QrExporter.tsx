@@ -168,13 +168,13 @@ export default function QrExporter() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">QR Code Export Engine</h2>
+        <h2 style={{ fontSize: 15, fontWeight: 500, color: 'var(--page-title)' }}>QR Code Export Engine</h2>
       </div>
 
       <Card>
         <CardContent className="p-6 space-y-6">
           <div>
-            <label className="block mb-2 text-sm font-medium">Select Assigned Section</label>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>Select Assigned Section</label>
             <div className="flex items-center space-x-4">
               <Select 
                 value={selectedSectionId} 
@@ -196,20 +196,27 @@ export default function QrExporter() {
           </div>
 
           {selectedSectionId && (
-            <div className="pt-6 border-t">
-              <h3 className="mb-4 text-lg font-semibold">Student Roster ({students.length})</h3>
+            <div style={{ paddingTop: 20, borderTop: '0.5px solid var(--card-border)' }}>
+              <h3 style={{ marginBottom: 14, fontSize: 14, fontWeight: 500, color: 'var(--page-title)' }}>Student Roster ({students.length})</h3>
               
               {loading ? (
-                <div className="text-gray-500">Loading roster...</div>
+                <div style={{ fontSize: 13, color: 'var(--muted-text)' }}>Loading roster...</div>
               ) : students.length === 0 ? (
-                <div className="text-gray-500">No students found in this section.</div>
+                <div style={{ fontSize: 13, color: 'var(--muted-text)' }}>No students found in this section.</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {students.map(student => (
-                    <div key={student.id} className="flex items-center justify-between p-4 border rounded-lg bg-gray-50 hover:bg-white hover:shadow-sm transition-all">
+                    <div key={student.id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '12px 14px',
+                      border: '0.5px solid var(--card-border)',
+                      borderRadius: 8,
+                      background: 'var(--row-alt)',
+                      transition: 'background 0.15s',
+                    }}>
                       <div>
-                        <div className="font-semibold text-gray-900">{student.full_name}</div>
-                        <div className="text-xs text-gray-500">LRN: {student.lrn}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--body-text)' }}>{student.full_name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted-text)', marginTop: 2 }}>LRN: {student.lrn}</div>
                       </div>
                       <Button variant="outline" size="sm" onClick={() => downloadSingleQR(student)}>
                         Export PNG

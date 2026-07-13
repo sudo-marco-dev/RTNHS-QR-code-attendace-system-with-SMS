@@ -120,7 +120,7 @@ export default function AttendanceGrid() {
     return <span style={{ fontSize: 11, color: 'var(--muted-text)' }}>—</span>
   }
 
-  if (loading) return <div className="py-8 text-center text-gray-500">Loading attendance data...</div>
+  if (loading) return <div style={{ padding: '32px', textAlign: 'center', fontSize: 13, color: 'var(--muted-text)' }}>Loading attendance data...</div>
 
   return (
     <div className="space-y-6">
@@ -148,7 +148,7 @@ export default function AttendanceGrid() {
                   type="date"
                   value={selectedDate}
                   onChange={e => setSelectedDate(e.target.value)}
-                  className="px-3 py-2 border rounded-md text-sm"
+                  style={{ borderRadius: 6 }}
                 />
               </div>
               <div className="overflow-x-auto">
@@ -243,7 +243,7 @@ export default function AttendanceGrid() {
           <Card>
             <CardContent className="p-4 md:p-6 space-y-4">
               <div className="flex flex-wrap justify-between items-center gap-3">
-                <p className="text-sm text-gray-500">Research-ready CSV with arrival times and window types.</p>
+                <p style={{ fontSize: 12, color: 'var(--muted-text)' }}>Research-ready CSV with arrival times and window types.</p>
                 <Button onClick={handleExportCsv} variant="outline" className="flex items-center gap-2">
                   <Download className="w-4 h-4" /> Download CSV
                 </Button>

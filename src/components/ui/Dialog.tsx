@@ -1,26 +1,78 @@
 import React from "react";
-import { cn } from "../../lib/utils";
 
-export const Dialog = ({ open, onOpenChange, children }: { open: boolean; onOpenChange: (open: boolean) => void; children: React.ReactNode }) => {
+export const Dialog = ({
+  open,
+  onOpenChange,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: React.ReactNode;
+}) => {
   if (!open) return null;
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" onClick={() => onOpenChange(false)} />
-      <div className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg">
+      {/* Backdrop */}
+      <div
+        style={{
+          position: 'fixed', inset: 0, zIndex: 50,
+          background: 'rgba(0,0,0,0.65)',
+          backdropFilter: 'blur(2px)',
+        }}
+        onClick={() => onOpenChange(false)}
+      />
+      {/* Panel */}
+      <div
+        style={{
+          position: 'fixed',
+          left: '50%', top: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 51,
+          width: '100%', maxWidth: 480,
+          background: 'var(--card-bg)',
+          border: '0.5px solid var(--card-border)',
+          borderRadius: 12,
+          padding: '28px 28px 24px',
+          boxShadow: '0 8px 48px rgba(0,0,0,0.3)',
+        }}
+      >
         {children}
       </div>
     </>
   );
 };
 
-export const DialogContent = ({ children, className }: { children: React.ReactNode; className?: string }) => (
-  <div className={cn("flex flex-col gap-4", className)}>{children}</div>
+export const DialogContent = ({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) => (
+  <div className={`flex flex-col gap-4 ${className ?? ''}`}>{children}</div>
 );
 
-export const DialogHeader = ({ children, className }: { children: React.ReactNode; className?: string }) => (
-  <div className={cn("flex flex-col space-y-1.5 text-center sm:text-left", className)}>{children}</div>
+export const DialogHeader = ({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) => (
+  <div className={`flex flex-col space-y-1 ${className ?? ''}`}>{children}</div>
 );
 
-export const DialogTitle = ({ children, className }: { children: React.ReactNode; className?: string }) => (
-  <h2 className={cn("text-lg font-semibold leading-none tracking-tight", className)}>{children}</h2>
+export const DialogTitle = ({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) => (
+  <h2
+    className={className}
+    style={{ fontSize: 15, fontWeight: 600, color: 'var(--page-title)', margin: 0 }}
+  >
+    {children}
+  </h2>
 );
