@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import jsQR from 'jsqr'
 
 interface Props {
@@ -14,6 +14,7 @@ export default function CameraStream({ onScan, active }: Props) {
   const lastCode = useRef<string>('')
   const lastCodeTime = useRef<number>(0)
   const streamRef = useRef<MediaStream | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const scanFrame = useCallback(() => {
     const video = videoRef.current
@@ -55,6 +56,11 @@ export default function CameraStream({ onScan, active }: Props) {
     if (!active) return
     let mounted = true
 
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setErrorMsg('Camera access requires a Secure Context (HTTPS or localhost). Please use https://... or run vite with --host and a basic SSL plugin.')
+      return
+    }
+
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } })
       .then(stream => {
@@ -66,7 +72,10 @@ export default function CameraStream({ onScan, active }: Props) {
         }
         animRef.current = requestAnimationFrame(scanFrame)
       })
-      .catch(err => console.error('Camera access error:', err))
+      .catch(err => {
+        console.error('Camera access error:', err)
+        if (mounted) setErrorMsg(`Camera error: ${err.message || 'Unknown error'}`)
+      })
 
     return () => {
       mounted = false
@@ -76,13 +85,20 @@ export default function CameraStream({ onScan, active }: Props) {
   }, [active, scanFrame])
 
   return (
-    <div className="relative w-full rounded-xl overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
-      <video
-        ref={videoRef}
-        className="w-full h-full object-cover"
-        muted
-        playsInline
-      />
+    <div className="relative w-full rounded-xl overflow-hidden bg-black flex items-center justify-center" style={{ aspectRatio: '16/9' }}>
+      {errorMsg ? (
+        <div className="text-red-400 text-sm text-center p-6 border border-red-900/50 bg-red-950/20 rounded-lg max-w-sm">
+          <p className="font-semibold mb-2">Camera Unavailable</p>
+          <p>{errorMsg}</p>
+        </div>
+      ) : (
+        <video
+          ref={videoRef}
+          className="w-full h-full object-cover"
+          muted
+          playsInline
+        />
+      )}
       <canvas ref={canvasRef} className="hidden" />
 
       {/* Scan targeting overlay */}

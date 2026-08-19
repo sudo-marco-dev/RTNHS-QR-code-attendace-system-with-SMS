@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createClient } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabase'
 import PinScreen from '../../components/scanner/PinScreen'
 import CameraStream from '../../components/scanner/CameraStream'
@@ -6,12 +7,19 @@ import StateControls from '../../components/scanner/StateControls'
 import type { ScanWindow, WindowType } from '../../components/scanner/StateControls'
 import { playSuccess, playDuplicate, playError } from '../../components/scanner/AudioFeedback'
 import { Zap } from 'lucide-react'
+import { sendAttendanceSms } from '../../lib/sms'
+
+const supabaseServiceRole = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY
+)
 
 interface Student {
   id: string
   full_name: string
   lrn: string
   qr_code: string
+  parent_phone: string | null
 }
 
 interface OfflineEntry {
@@ -52,6 +60,11 @@ export default function ScannerTerminal() {
   const [feedback, setFeedback] = useState<FeedbackCard | null>(null)
   const [offlineQueue, setOfflineQueue] = useState<OfflineEntry[]>(loadOfflineQueue())
   const [manualLrn, setManualLrn] = useState('')
+  
+  type SmsStatus = 'idle' | 'sending' | 'sent' | 'failed' | 'no_phone';
+  const [smsStatus, setSmsStatus] = useState<SmsStatus>('idle');
+  const [lastSmsSentTo, setLastSmsSentTo] = useState<string | null>(null);
+
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flushingRef = useRef(false)
 
@@ -61,7 +74,7 @@ export default function ScannerTerminal() {
     const fetchStudents = async () => {
       const { data } = await supabase
         .from('students')
-        .select('id, full_name, lrn, qr_code')
+        .select('id, full_name, lrn, qr_code, parent_phone')
         .eq('section_id', sectionId)
         .order('full_name')
       if (data) setStudents(data as Student[])
@@ -84,7 +97,7 @@ export default function ScannerTerminal() {
 
     const remaining: OfflineEntry[] = []
     for (const entry of queue) {
-      const { error } = await supabase.from('attendance_logs').insert(entry)
+      const { error } = await supabaseServiceRole.from('attendance_logs').insert(entry)
       if (error) remaining.push(entry)
     }
 
@@ -102,6 +115,7 @@ export default function ScannerTerminal() {
   const processCode = useCallback(async (code: string) => {
     // Find student by qr_code first, then lrn
     const student = students.find(s => s.qr_code === code || s.lrn === code)
+    console.log('[SCANNER] Student fetched:', student)
 
     if (!student) {
       playError()
@@ -121,22 +135,61 @@ export default function ScannerTerminal() {
       return
     }
 
+    const scanTime = new Date()
     const status: 'PRESENT' | 'LATE' = scanWindow.status === 'open' ? 'PRESENT' : 'LATE'
     const entry: OfflineEntry = {
       student_id: student.id,
       scan_window_id: scanWindow.id,
       status,
-      scanned_at: new Date().toISOString(),
+      scanned_at: scanTime.toISOString(),
       offline_sync: false
     }
 
-    const { error } = await supabase.from('attendance_logs').insert(entry)
+    let logData: { id: string } | null = null
+    let error: any = null
+    try {
+      const result = await supabaseServiceRole.from('attendance_logs').insert(entry).select('id').single()
+      console.log('[SCANNER] Attendance inserted:', result)
+      logData = result.data
+      error = result.error
+    } catch (insertError) {
+      console.error('[SCANNER] Attendance insert failed:', insertError)
+      error = insertError
+    }
 
     if (error) {
       // Queue offline
       const newQueue = [...loadOfflineQueue(), { ...entry, offline_sync: true }]
       saveOfflineQueue(newQueue)
       setOfflineQueue(newQueue)
+    } else {
+      console.log('[SMS] Scan success, student:', student.full_name, 'parent_phone:', student.parent_phone)
+      // Send SMS
+      setSmsStatus('sending')
+      console.log('[SMS] Calling sendAttendanceSms...')
+      const smsResult = await sendAttendanceSms({
+        studentName: student.full_name,
+        section: sectionName,
+        scanType: windowType.includes('out') ? 'TIME OUT' : 'TIME IN',
+        scannedAt: scanTime,
+        parentPhone: student.parent_phone
+      })
+      console.log('[SMS] Result:', smsResult)
+      setSmsStatus(smsResult)
+      setLastSmsSentTo(student.parent_phone)
+
+      if (logData?.id) {
+        const timeStr = scanTime.toLocaleTimeString('en-PH', {hour: '2-digit', minute:'2-digit', hour12:true});
+        const dateStr = scanTime.toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'});
+        await supabase.from('sms_logs').insert({
+          attendance_log_id: logData.id,
+          student_id: student.id,
+          parent_phone: student.parent_phone,
+          message_content: `[RTNHS Attendance] ${student.full_name} has ${windowType.includes('out') ? 'TIME OUT' : 'TIME IN'} at ${timeStr}. Date: ${dateStr} | ${sectionName}`,
+          status: smsResult
+        });
+      }
+      setTimeout(() => setSmsStatus('idle'), 5000)
     }
 
     playSuccess()
@@ -266,6 +319,57 @@ export default function ScannerTerminal() {
                   {feedback.status}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* SMS Status Indicator */}
+          {smsStatus !== 'idle' && (
+            <div style={{
+              marginTop: 10,
+              padding: '10px 14px',
+              borderRadius: 8,
+              border: '1px solid',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+              ...(smsStatus === 'sending' && {
+                background: 'rgba(195,216,152,0.08)',
+                borderColor: 'rgba(195,216,152,0.25)',
+                color: '#9fc98a',
+              }),
+              ...(smsStatus === 'sent' && {
+                background: 'rgba(195,216,152,0.12)',
+                borderColor: 'rgba(195,216,152,0.4)',
+                color: '#c3d898',
+              }),
+              ...(smsStatus === 'failed' && {
+                background: 'rgba(112,22,30,0.15)',
+                borderColor: 'rgba(112,22,30,0.4)',
+                color: '#f5c0c3',
+              }),
+              ...(smsStatus === 'no_phone' && {
+                background: 'rgba(195,216,152,0.05)',
+                borderColor: 'rgba(195,216,152,0.15)',
+                color: '#6b9e5e',
+              }),
+            }}>
+              <i
+                className={
+                  smsStatus === 'sending' ? 'ti ti-loader-2 animate-spin' :
+                  smsStatus === 'sent'    ? 'ti ti-check' :
+                  smsStatus === 'failed'  ? 'ti ti-alert-triangle' :
+                  'ti ti-phone-off'
+                }
+                style={{ fontSize: 16 }}
+                aria-hidden
+              />
+              <span>
+                {smsStatus === 'sending' && 'Sending SMS to parent...'}
+                {smsStatus === 'sent'    && `SMS sent to parent (${lastSmsSentTo})`}
+                {smsStatus === 'failed'  && 'SMS failed — check API key or phone connection'}
+                {smsStatus === 'no_phone' && 'No parent phone number on record for this student'}
+              </span>
             </div>
           )}
         </div>
