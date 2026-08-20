@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Papa from 'papaparse'
+import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../ui/Button'
 import { Select } from '../ui/Select'
@@ -33,28 +34,119 @@ export default function StudentImport() {
     fetchSections()
   }, [])
 
+  // Normalize a header string for flexible matching
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+  // Map of normalized aliases → canonical field name
+  const COLUMN_ALIASES: Record<string, keyof ParsedStudent> = {
+    // full_name aliases
+    fullname: 'full_name',
+    full_name: 'full_name',
+    name: 'full_name',
+    studentname: 'full_name',
+    student: 'full_name',
+    studentsname: 'full_name',
+    completename: 'full_name',
+    // lrn aliases
+    lrn: 'full_name', // overridden below
+    learnerreferenceNumber: 'full_name', // overridden below
+    // parent_phone aliases
+    parentphone: 'parent_phone',
+    parent_phone: 'parent_phone',
+    phone: 'parent_phone',
+    phonenumber: 'parent_phone',
+    contactnumber: 'parent_phone',
+    contact: 'parent_phone',
+    parentcontact: 'parent_phone',
+    guardianphone: 'parent_phone',
+    mobile: 'parent_phone',
+    mobilenumber: 'parent_phone',
+    cellphone: 'parent_phone',
+  }
+  // LRN aliases (set separately to avoid object key conflict above)
+  COLUMN_ALIASES['lrn'] = 'lrn'
+  COLUMN_ALIASES['learnerreferencenumber'] = 'lrn'
+  COLUMN_ALIASES['learnerid'] = 'lrn'
+  COLUMN_ALIASES['studentid'] = 'lrn'
+  COLUMN_ALIASES['idnumber'] = 'lrn'
+  COLUMN_ALIASES['id'] = 'lrn'
+
+  const resolveField = (header: string): keyof ParsedStudent | null => {
+    return COLUMN_ALIASES[normalize(header)] || null
+  }
+
+  const parseRows = (rows: any[]) => {
+    if (rows.length === 0) {
+      setParsedData([])
+      setStatus({ message: 'No data rows found in file.', type: 'error' })
+      return
+    }
+
+    // Build a mapping from original headers → canonical field names
+    const sampleRow = rows[0]
+    const headerMap: Record<string, keyof ParsedStudent> = {}
+    for (const key of Object.keys(sampleRow)) {
+      const field = resolveField(key)
+      if (field) headerMap[key] = field
+    }
+
+    if (!headerMap || !Object.values(headerMap).includes('full_name')) {
+      const foundHeaders = Object.keys(sampleRow).join(', ')
+      setStatus({
+        message: `Could not find a "name" column. Found headers: ${foundHeaders}. Expected something like: full_name, lrn, parent_phone`,
+        type: 'error'
+      })
+      setParsedData([])
+      return
+    }
+
+    const validRows: ParsedStudent[] = rows.map(row => {
+      const mapped: ParsedStudent = { full_name: '', lrn: '', parent_phone: '' }
+      for (const [originalKey, canonicalField] of Object.entries(headerMap)) {
+        const value = String(row[originalKey] ?? '').trim()
+        if (value && !mapped[canonicalField]) {
+          mapped[canonicalField] = value
+        }
+      }
+      return mapped
+    }).filter(row => row.full_name)
+
+    setParsedData(validRows)
+    setStatus({ message: `Successfully parsed ${validRows.length} rows.`, type: 'info' })
+  }
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const rows = results.data as any[]
-        const validRows: ParsedStudent[] = rows.map(row => ({
-          full_name: row.full_name || '',
-          lrn: row.lrn || '',
-          parent_phone: row.parent_phone || ''
-        })).filter(row => row.full_name && row.lrn)
+    const ext = file.name.split('.').pop()?.toLowerCase()
 
-        setParsedData(validRows)
-        setStatus({ message: `Successfully parsed ${validRows.length} rows.`, type: 'info' })
-      },
-      error: (error) => {
-        setStatus({ message: `Error parsing CSV: ${error.message}`, type: 'error' })
+    if (ext === 'csv') {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => parseRows(results.data as any[]),
+        error: (error) => {
+          setStatus({ message: `Error parsing CSV: ${error.message}`, type: 'error' })
+        }
+      })
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      const reader = new FileReader()
+      reader.onload = (evt) => {
+        try {
+          const data = new Uint8Array(evt.target?.result as ArrayBuffer)
+          const workbook = XLSX.read(data, { type: 'array' })
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+          const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' })
+          parseRows(rows)
+        } catch (err: any) {
+          setStatus({ message: `Error parsing Excel file: ${err.message}`, type: 'error' })
+        }
       }
-    })
+      reader.readAsArrayBuffer(file)
+    } else {
+      setStatus({ message: 'Unsupported file type. Please use .csv, .xlsx, or .xls files.', type: 'error' })
+    }
   }
 
   const handleImport = async () => {
@@ -70,7 +162,7 @@ export default function StudentImport() {
     const recordsToInsert = parsedData.map(student => ({
       section_id: selectedSection,
       full_name: student.full_name,
-      lrn: student.lrn,
+      lrn: student.lrn || null,
       parent_phone: student.parent_phone,
       qr_code: crypto.randomUUID()
     }))
@@ -92,8 +184,8 @@ export default function StudentImport() {
       setStatus({ message: 'Please select a section first.', type: 'error' })
       return
     }
-    if (!singleStudent.full_name || !singleStudent.lrn) {
-      setStatus({ message: 'Full Name and LRN are required.', type: 'error' })
+    if (!singleStudent.full_name) {
+      setStatus({ message: 'Full Name is required.', type: 'error' })
       return
     }
 
@@ -103,7 +195,7 @@ export default function StudentImport() {
     const { error } = await supabase.from('students').insert({
       section_id: selectedSection,
       full_name: singleStudent.full_name,
-      lrn: singleStudent.lrn,
+      lrn: singleStudent.lrn || null,
       parent_phone: singleStudent.parent_phone,
       qr_code: crypto.randomUUID()
     })
@@ -162,7 +254,7 @@ export default function StudentImport() {
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>LRN</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>LRN <span style={{ color: 'var(--muted-text)', fontWeight: 400 }}>(Optional)</span></label>
                 <input
                   type="text"
                   placeholder="123456789012"
@@ -194,11 +286,11 @@ export default function StudentImport() {
           <TabsContent value="batch">
             <div className="mt-2">
               <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>
-                Upload CSV File
+                Upload File (.csv, .xlsx, .xls)
               </label>
               <input
                 type="file"
-                accept=".csv"
+                accept=".csv,.xlsx,.xls"
                 onChange={handleFileUpload}
                 style={{
                   display: 'block', width: '100%', fontSize: 12,
@@ -206,7 +298,7 @@ export default function StudentImport() {
                 }}
               />
               <p style={{ marginTop: 4, fontSize: 11, color: 'var(--muted-text)' }}>
-                Requires headers: full_name, lrn, parent_phone
+                Needs a column for student name (e.g. "Full Name", "Name", "Student Name"). LRN and Phone columns are auto-detected if present.
               </p>
             </div>
 
@@ -216,9 +308,14 @@ export default function StudentImport() {
                   <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--page-title)' }}>
                     Preview ({parsedData.length} rows)
                   </h3>
-                  <Button onClick={handleImport} disabled={loading || !selectedSection}>
-                    {loading ? 'Processing...' : 'Confirm & Insert'}
-                  </Button>
+                <div className="flex items-center gap-3">
+                    {!selectedSection && (
+                      <span style={{ fontSize: 12, color: 'var(--danger-text)' }}>⚠ Select a section above first</span>
+                    )}
+                    <Button onClick={handleImport} disabled={loading || !selectedSection}>
+                      {loading ? 'Processing...' : 'Confirm & Insert'}
+                    </Button>
+                  </div>
                 </div>
 
                 <div style={{ maxHeight: 384, overflowY: 'auto', border: '0.5px solid var(--card-border)', borderRadius: 8, overflow: 'hidden' }}>

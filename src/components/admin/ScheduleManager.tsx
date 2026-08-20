@@ -6,6 +6,9 @@ import { Select } from '../ui/Select'
 
 interface Assignment {
   id: string
+  teacher_id: string
+  subject_id: string
+  section_id: string
   time_slot: string
   days_of_week: string[]
   teacher: { full_name: string }
@@ -38,11 +41,21 @@ export default function ScheduleManager() {
   const [selectedDays, setSelectedDays] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
+  // Edit State
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [editData, setEditData] = useState<{id:string, teacherId:string, subjectId:string, sectionId:string, startTime:string, endTime:string, selectedDays:string[]}|null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Delete State
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [assignmentToDelete, setAssignmentToDelete] = useState<Assignment | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   const fetchData = async () => {
     const { data: assignData } = await supabase
       .from('teacher_assignments')
       .select(`
-        id, time_slot, days_of_week,
+        id, time_slot, days_of_week, teacher_id, subject_id, section_id,
         teacher:profiles!teacher_id(full_name),
         subject:subjects!subject_id(name, code),
         section:sections!section_id(name, grade_level)
@@ -94,7 +107,86 @@ export default function ScheduleManager() {
     setLoading(false)
   }
 
-  const COL_TEMPLATE = '2fr 2fr 1.5fr 2fr 2fr'
+  const openEdit = (a: Assignment) => {
+    const times = a.time_slot.split(' - ')
+    setEditData({
+      id: a.id,
+      teacherId: a.teacher_id,
+      subjectId: a.subject_id,
+      sectionId: a.section_id,
+      startTime: times[0] || '',
+      endTime: times[1] || '',
+      selectedDays: a.days_of_week
+    })
+    setError(null)
+    setIsEditOpen(true)
+  }
+
+  const handleEditToggleDay = (day: string) => {
+    if (!editData) return
+    setEditData(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        selectedDays: prev.selectedDays.includes(day) 
+          ? prev.selectedDays.filter(d => d !== day) 
+          : [...prev.selectedDays, day]
+      }
+    })
+  }
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editData) return
+    if (editData.selectedDays.length === 0) { setError('Please select at least one day.'); return }
+
+    const startIndex = TIME_OPTIONS.indexOf(editData.startTime)
+    const endIndex = TIME_OPTIONS.indexOf(editData.endTime)
+    if (startIndex === -1 || endIndex === -1 || startIndex >= endIndex) {
+      setError('End Time must be later than Start Time.'); return
+    }
+
+    setIsSaving(true)
+    setError(null)
+
+    const { error: updateError } = await supabase.from('teacher_assignments').update({
+      teacher_id: editData.teacherId, subject_id: editData.subjectId, section_id: editData.sectionId,
+      time_slot: `${editData.startTime} - ${editData.endTime}`, days_of_week: editData.selectedDays
+    }).eq('id', editData.id)
+
+    if (updateError) {
+      setError(updateError.message)
+    } else {
+      setIsEditOpen(false)
+      fetchData()
+    }
+    setIsSaving(false)
+  }
+
+  const openDelete = (a: Assignment) => {
+    setAssignmentToDelete(a)
+    setIsDeleteOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!assignmentToDelete) return
+    setIsDeleting(true)
+    
+    const { error: deleteError } = await supabase
+      .from('teacher_assignments')
+      .delete()
+      .eq('id', assignmentToDelete.id)
+
+    if (deleteError) {
+      alert(`Failed to delete: ${deleteError.message}`)
+    } else {
+      setIsDeleteOpen(false)
+      fetchData()
+    }
+    setIsDeleting(false)
+  }
+
+  const COL_TEMPLATE = '2fr 2fr 1.5fr 2fr 2fr 1fr'
 
   return (
     <div className="space-y-6">
@@ -105,7 +197,7 @@ export default function ScheduleManager() {
 
       <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, overflow: 'hidden' }}>
         <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: COL_TEMPLATE, padding: '9px 16px' }}>
-          {['Teacher', 'Subject', 'Section', 'Time Slot', 'Days'].map(c => (
+          {['Teacher', 'Subject', 'Section', 'Time Slot', 'Days', 'Actions'].map(c => (
             <span key={c} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>{c}</span>
           ))}
         </div>
@@ -123,6 +215,12 @@ export default function ScheduleManager() {
             <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{a.section?.grade_level} {a.section?.name}</span>
             <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{a.time_slot}</span>
             <span style={{ fontSize: 11, color: 'var(--muted-text)' }}>{a.days_of_week.join(', ')}</span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => openEdit(a)}>Edit</Button>
+              <Button variant="outline" size="sm" onClick={() => openDelete(a)} style={{ borderColor: 'var(--danger-text)', color: 'var(--danger-text)' }}>
+                Delete
+              </Button>
+            </div>
           </div>
         ))}
       </div>
@@ -192,6 +290,92 @@ export default function ScheduleManager() {
               <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save Assignment'}</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Schedule Assignment</DialogTitle>
+          </DialogHeader>
+          {error && <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--danger-text)', background: 'var(--danger)', borderRadius: 7 }}>{error}</div>}
+          {editData && (
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>Teacher</label>
+                <Select required value={editData.teacherId} onChange={(e) => setEditData({ ...editData, teacherId: e.target.value })}>
+                  {teachers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                </Select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>Subject</label>
+                <Select required value={editData.subjectId} onChange={(e) => setEditData({ ...editData, subjectId: e.target.value })}>
+                  {subjects.map(s => <option key={s.id} value={s.id}>{s.code} - {s.name}</option>)}
+                </Select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>Section</label>
+                <Select required value={editData.sectionId} onChange={(e) => setEditData({ ...editData, sectionId: e.target.value })}>
+                  {sections.map(s => <option key={s.id} value={s.id}>{s.grade_level} - {s.name}</option>)}
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>Start Time</label>
+                  <Select required value={editData.startTime} onChange={(e) => setEditData({ ...editData, startTime: e.target.value })}>
+                    {TIME_OPTIONS.map(time => <option key={time} value={time}>{time}</option>)}
+                  </Select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>End Time</label>
+                  <Select required value={editData.endTime} onChange={(e) => setEditData({ ...editData, endTime: e.target.value })}>
+                    {TIME_OPTIONS.map(time => <option key={time} value={time}>{time}</option>)}
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>Days of Week</label>
+                <div className="flex flex-wrap gap-2">
+                  {DAYS.map(day => (
+                    <label key={day} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--body-text)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={editData.selectedDays.includes(day)}
+                        onChange={() => handleEditToggleDay(day)}
+                        style={{ accentColor: 'var(--primary)' }}
+                      />
+                      {day}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-end pt-4 space-x-2">
+                <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
+                <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Changes'}</Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Deletion</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p style={{ fontSize: 14, color: 'var(--body-text)' }}>
+              Are you sure you want to delete the schedule for <strong>{assignmentToDelete?.teacher.full_name}</strong> in <strong>{assignmentToDelete?.section.grade_level} {assignmentToDelete?.section.name}</strong>?
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--danger-text)', marginTop: 8 }}>
+              This action cannot be undone.
+            </p>
+          </div>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
+            <Button onClick={handleDeleteConfirm} disabled={isDeleting} style={{ background: 'var(--danger)', color: 'white', border: 'none' }}>
+              {isDeleting ? 'Deleting...' : 'Delete Assignment'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

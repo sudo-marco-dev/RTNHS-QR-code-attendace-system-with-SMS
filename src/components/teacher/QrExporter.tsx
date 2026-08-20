@@ -17,7 +17,7 @@ interface Student {
 }
 
 export default function QrExporter() {
-  const { user } = useAuth()
+  const { user, role } = useAuth()
   const [sections, setSections] = useState<any[]>([])
   const [selectedSectionId, setSelectedSectionId] = useState('')
   const [students, setStudents] = useState<Student[]>([])
@@ -28,26 +28,35 @@ export default function QrExporter() {
     const fetchSections = async () => {
       if (!user) return
       
-      const { data } = await supabase
-        .from('teacher_assignments')
-        .select(`
-          section_id,
-          sections:sections!section_id(id, name, grade_level)
-        `)
-        .eq('teacher_id', user.id)
+      if (role === 'admin') {
+        const { data } = await supabase
+          .from('sections')
+          .select('id, name, grade_level')
+          .order('grade_level')
         
-      if (data) {
-        // Deduplicate sections
-        const uniqueSections = new Map()
-        data.forEach(item => {
-          if (item.sections) uniqueSections.set(item.section_id, item.sections)
-        })
-        setSections(Array.from(uniqueSections.values()))
+        if (data) setSections(data)
+      } else {
+        const { data } = await supabase
+          .from('teacher_assignments')
+          .select(`
+            section_id,
+            sections:sections!section_id(id, name, grade_level)
+          `)
+          .eq('teacher_id', user.id)
+          
+        if (data) {
+          // Deduplicate sections
+          const uniqueSections = new Map()
+          data.forEach(item => {
+            if (item.sections) uniqueSections.set(item.section_id, item.sections)
+          })
+          setSections(Array.from(uniqueSections.values()))
+        }
       }
       setLoading(false)
     }
     fetchSections()
-  }, [user])
+  }, [user, role])
 
   useEffect(() => {
     const fetchStudents = async () => {
@@ -93,21 +102,26 @@ export default function QrExporter() {
     setGenerating(true)
     
     try {
+      // Default jsPDF creates an A4 document (210mm x 297mm)
       const doc = new jsPDF()
       
       const cols = 2
       const rows = 4
-      const cardWidth = 90
-      const cardHeight = 65
-      const startX = 10
-      const startY = 15
-      const xSpacing = 100 // 10 + 90 = 100, next col at 110
-      const ySpacing = 70  // 15 + 65 = 80, next row at 85
+      
+      // Sized slightly smaller than standard CR80 (85.6 x 54 mm)
+      // to ensure it easily slides into standard ID card sleeves after cutting.
+      const cardWidth = 82
+      const cardHeight = 52
+      
+      const startX = 15  // Left margin on A4 paper
+      const startY = 20  // Top margin on A4 paper
+      const xSpacing = cardWidth + 15
+      const ySpacing = cardHeight + 15
       
       for (let i = 0; i < students.length; i++) {
         const student = students[i]
         
-        // Add new page if we exceed 8 cards
+        // Add new page if we exceed 8 cards (2 columns * 4 rows)
         if (i > 0 && i % (cols * rows) === 0) {
           doc.addPage()
         }
@@ -121,38 +135,49 @@ export default function QrExporter() {
         
         // Draw card border
         doc.setDrawColor(0)
-        doc.setLineWidth(0.5)
+        doc.setLineWidth(0.3)
         doc.rect(x, y, cardWidth, cardHeight)
         
         // Header Text
-        doc.setFontSize(10)
+        doc.setFontSize(9)
         doc.setFont("helvetica", "bold")
-        doc.text("Rio Tuba National High School", x + cardWidth / 2, y + 8, { align: "center" })
+        doc.text("Rio Tuba National High School", x + cardWidth / 2, y + 7, { align: "center" })
         
         // Divider
-        doc.line(x + 5, y + 12, x + cardWidth - 5, y + 12)
+        doc.line(x + 4, y + 10, x + cardWidth - 4, y + 10)
+        
+        const qrSize = 32
+        const qrX = x + cardWidth - qrSize - 4
+        const qrY = y + 14
         
         // Student Info
-        doc.setFontSize(12)
+        doc.setFontSize(11)
         doc.setFont("helvetica", "bold")
-        doc.text(student.full_name, x + 5, y + 20)
         
-        doc.setFontSize(10)
+        // Wrap long names so they don't overlap the QR code
+        const maxNameWidth = cardWidth - qrSize - 12
+        const splitName = doc.splitTextToSize(student.full_name, maxNameWidth)
+        doc.text(splitName, x + 4, y + 18)
+        
+        // Calculate dynamic Y position based on how many lines the name took
+        let currentY = y + 18 + ((splitName.length - 1) * 5) + 8
+        
+        doc.setFontSize(9)
         doc.setFont("helvetica", "normal")
-        doc.text(`LRN: ${student.lrn}`, x + 5, y + 28)
-        doc.text(`Section: ${student.section_grade} ${student.section_name}`, x + 5, y + 34)
+        
+        // Only print LRN if it exists
+        if (student.lrn) {
+          doc.text(`LRN: ${student.lrn}`, x + 4, currentY)
+          currentY += 6
+        }
+        
+        doc.text(`Sec: ${student.section_grade} ${student.section_name}`, x + 4, currentY)
         
         // Generate QR code data URL
         const qrDataUrl = await QRCode.toDataURL(student.qr_code, { width: 150, margin: 1 })
         
-        // Add QR image to PDF (x, y, width, height)
-        // Position on the right side of the card
-        const qrSize = 35
-        doc.addImage(qrDataUrl, 'PNG', x + cardWidth - qrSize - 5, y + 15, qrSize, qrSize)
-        
-        // Footer text below QR
-        doc.setFontSize(7)
-        doc.text("Official ID Hash", x + cardWidth - (qrSize/2) - 5, y + 55, { align: "center" })
+        // Add QR image to PDF
+        doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize)
       }
       
       const secLabel = students[0].section_grade + "_" + students[0].section_name
@@ -174,7 +199,9 @@ export default function QrExporter() {
       <Card>
         <CardContent className="p-6 space-y-6">
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>Select Assigned Section</label>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>
+              {role === 'admin' ? 'Select Section' : 'Select Assigned Section'}
+            </label>
             <div className="flex items-center space-x-4">
               <Select 
                 value={selectedSectionId} 

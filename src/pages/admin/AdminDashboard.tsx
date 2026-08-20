@@ -6,9 +6,11 @@ import { LayoutDashboard, LogOut } from 'lucide-react'
 import { ThemeToggle } from '../../components/ui/ThemeToggle'
 import SectionManager from '../../components/admin/SectionManager'
 import StudentImport from '../../components/admin/StudentImport'
+import StudentManager from '../../components/admin/StudentManager'
 import TeacherManager from '../../components/admin/TeacherManager'
 import SubjectManager from '../../components/admin/SubjectManager'
 import ScheduleManager from '../../components/admin/ScheduleManager'
+import QrExporter from '../../components/teacher/QrExporter'
 
 export default function AdminDashboard() {
   const { role } = useAuth()
@@ -43,10 +45,12 @@ export default function AdminDashboard() {
 
   const navItems = [
     { name: 'Sections & PINs', path: '/admin/sections' },
-    { name: 'Student Roster', path: '/admin/students' },
+    { name: 'Import Students', path: '/admin/students/import' },
+    { name: 'Manage Students', path: '/admin/students/manage' },
     { name: 'Teachers', path: '/admin/teachers' },
     { name: 'Subjects', path: '/admin/subjects' },
     { name: 'Schedules', path: '/admin/schedules' },
+    { name: 'Export QR', path: '/admin/qr-export' },
   ]
 
   const SidebarContent = () => (
@@ -199,10 +203,12 @@ export default function AdminDashboard() {
                   </div>
                 } />
                 <Route path="sections" element={<SectionManager />} />
-                <Route path="students" element={<StudentImport />} />
+                <Route path="students/import" element={<StudentImport />} />
+                <Route path="students/manage" element={<StudentManager />} />
                 <Route path="teachers" element={<TeacherManager />} />
                 <Route path="subjects" element={<SubjectManager />} />
                 <Route path="schedules" element={<ScheduleManager />} />
+                <Route path="qr-export" element={<QrExporter />} />
               </Routes>
             </div>
           </div>
