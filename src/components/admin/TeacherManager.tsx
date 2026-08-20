@@ -4,7 +4,6 @@ import { supabase } from '../../lib/supabase'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
-import { Select } from '../ui/Select'
 
 interface Profile {
   id: string
