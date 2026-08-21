@@ -185,8 +185,6 @@ export default function StudentManager() {
     setIsDeleting(false)
   }
 
-  const COL_TEMPLATE = '40px 2fr 2fr 2fr 1fr'
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">

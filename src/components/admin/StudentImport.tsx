@@ -280,8 +280,6 @@ export default function StudentImport() {
     info:    { color: 'var(--body-text)', background: 'var(--card-bg)', border: '0.5px solid var(--card-border)' },
   }
 
-  const PREVIEW_COL = '40px 2fr 1fr 1fr'
-
   return (
     <div className="space-y-6">
       <h2 style={{ fontSize: 15, fontWeight: 500, color: 'var(--page-title)' }}>Student Roster Management</h2>
