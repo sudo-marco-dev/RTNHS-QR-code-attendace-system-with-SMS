@@ -28,11 +28,14 @@ export const Dialog = ({
           left: '50%', top: '50%',
           transform: 'translate(-50%, -50%)',
           zIndex: 51,
-          width: '100%', maxWidth: 480,
+          width: 'calc(100% - 32px)',
+          maxWidth: 480,
+          maxHeight: 'calc(100dvh - 32px)',
+          overflowY: 'auto',
           background: 'var(--card-bg)',
           border: '0.5px solid var(--card-border)',
           borderRadius: 12,
-          padding: '28px 28px 24px',
+          padding: '24px',
           boxShadow: '0 8px 48px rgba(0,0,0,0.3)',
         }}
       >

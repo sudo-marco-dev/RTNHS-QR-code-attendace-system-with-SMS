@@ -292,7 +292,7 @@ export default function ScannerTerminal() {
                 <button
                   key={t}
                   onClick={() => setWindowType(t)}
-                  className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-all ${
+                  className={`flex-1 min-h-[44px] py-2 text-xs font-semibold rounded-lg border transition-all ${
                     windowType === t
                       ? 'bg-forest-mid border-[rgba(195,216,152,0.3)] text-tea'
                       : 'bg-transparent border-[rgba(195,216,152,0.2)] text-muted-on-dark hover:border-[rgba(195,216,152,0.3)]'
@@ -411,11 +411,11 @@ export default function ScannerTerminal() {
                 value={manualLrn}
                 onChange={e => setManualLrn(e.target.value)}
                 placeholder="Type or paste student LRN..."
-                className="flex-1 px-3 py-2 bg-transparent border border-[rgba(195,216,152,0.3)] rounded-lg text-sm text-text-on-dark focus:outline-none focus:border-tea placeholder:text-muted-on-dark"
+                className="flex-1 min-h-[44px] px-3 py-2 bg-transparent border border-[rgba(195,216,152,0.3)] rounded-lg text-sm text-text-on-dark focus:outline-none focus:border-tea placeholder:text-muted-on-dark"
               />
               <button
                 type="submit"
-                className="px-4 py-2 bg-forest hover:bg-forest-mid text-tea rounded-lg text-sm font-semibold transition-colors"
+                className="min-h-[44px] px-4 py-2 bg-forest hover:bg-forest-mid text-tea rounded-lg text-sm font-semibold transition-colors"
               >
                 Submit
               </button>

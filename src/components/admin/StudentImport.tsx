@@ -423,38 +423,58 @@ export default function StudentImport() {
                   <Button variant="outline" size="sm" onClick={handleInvertSelection}>Invert</Button>
                 </div>
 
-                <div style={{ maxHeight: 384, overflowY: 'auto', border: '0.5px solid var(--card-border)', borderRadius: 8, overflow: 'hidden' }}>
-                  <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: PREVIEW_COL, padding: '9px 14px' }}>
+                <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl overflow-y-auto max-h-[384px]">
+                  {/* Desktop Header */}
+                  <div className="hidden md:grid grid-cols-[40px_2fr_1fr_1fr] px-4 py-3 bg-[var(--table-header-bg)] border-b border-[var(--card-border)]">
                     {['', 'Full Name', 'LRN', 'Parent Phone'].map((c, i) => (
-                      <span key={i} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>{c}</span>
+                      <span key={i} className="text-xs font-medium text-[var(--table-header-text)]">{c}</span>
                     ))}
                   </div>
-                  {filteredAndSortedData.map((row, idx) => {
-                    const isSelected = selectedStudentIds.has(row._tempId)
-                    return (
-                      <div key={row._tempId} style={{
-                        display: 'grid', gridTemplateColumns: PREVIEW_COL,
-                        padding: '8px 14px', borderTop: '0.5px solid var(--card-border)',
-                        background: isSelected ? 'var(--row-hover)' : (idx % 2 === 1 ? 'var(--row-alt)' : 'transparent'),
-                        cursor: 'pointer', transition: 'background 0.15s'
-                      }} onClick={() => toggleSelection(row._tempId)}>
-                        <div className="flex items-center" onClick={e => e.stopPropagation()}>
-                          <input 
-                            type="checkbox" 
-                            checked={isSelected}
-                            onChange={() => toggleSelection(row._tempId)}
-                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                          />
+
+                  <div className="flex flex-col">
+                    {filteredAndSortedData.map((row, idx) => {
+                      const isSelected = selectedStudentIds.has(row._tempId)
+                      return (
+                        <div key={row._tempId}
+                          onClick={() => toggleSelection(row._tempId)}
+                          className={`flex items-start md:grid md:grid-cols-[40px_2fr_1fr_1fr] md:items-center px-4 py-3 border-b border-[var(--card-border)] cursor-pointer transition-colors ${
+                            isSelected ? 'bg-[var(--row-hover)]' : (idx % 2 === 1 ? 'bg-[var(--row-alt)]' : 'bg-transparent')
+                          }`}
+                        >
+                          {/* Checkbox */}
+                          <div className="flex-shrink-0 pt-0.5 md:pt-0" onClick={e => e.stopPropagation()}>
+                            <input 
+                              type="checkbox" 
+                              checked={isSelected}
+                              onChange={() => toggleSelection(row._tempId)}
+                              className="w-[18px] h-[18px] md:w-4 md:h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            />
+                          </div>
+
+                          {/* Content Stack on Mobile / Grid on Desktop */}
+                          <div className="ml-3 md:ml-0 flex flex-col md:contents flex-1 min-w-0">
+                            {/* Primary Info */}
+                            <span className="text-[14px] md:text-xs font-medium text-[var(--body-text)] truncate">
+                              <span className="text-[var(--muted-text)] mr-1.5">{idx + 1}.</span> 
+                              {row.full_name}
+                            </span>
+
+                            {/* Secondary Info */}
+                            <div className="flex flex-wrap md:contents gap-x-3 gap-y-1 mt-1 md:mt-0 text-[13px] md:text-xs">
+                              <span className="text-[var(--body-text)]">
+                                <span className="md:hidden text-[var(--muted-text)] mr-1">LRN:</span>
+                                {row.lrn || '-'}
+                              </span>
+                              <span className="text-[var(--muted-text)]">
+                                <span className="md:hidden mr-1">Phone:</span>
+                                {row.parent_phone || '-'}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <span style={{ fontSize: 12, color: 'var(--body-text)' }}>
-                          <span style={{ color: 'var(--muted-text)', marginRight: 6 }}>{idx + 1}.</span> 
-                          {row.full_name}
-                        </span>
-                        <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{row.lrn}</span>
-                        <span style={{ fontSize: 12, color: 'var(--muted-text)' }}>{row.parent_phone}</span>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
             )}

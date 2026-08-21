@@ -70,4 +70,13 @@ The application is divided into three distinct user portals, protected by role-b
   - **Student Manager Bulk Deletion**: Added checkbox selection, search, sorting, and bulk delete with confirmation dialog to the Student Roster Management panel. Rows are numbered for easy tracking.
   - **Drag-and-Drop Import**: Upgraded batch student import with a stylized drag-and-drop zone (also supports click-to-browse).
   - **Selectable Import Preview**: Import preview table now features full selection controls (checkboxes, select all, deselect, invert, search, sorting). Only selected rows from the preview are inserted on confirm.
+  - **Mobile-First UI/UX Overhaul**:
+    - Standardized all interactive elements (buttons, inputs, selects) to `min-height: 44px` for accessible touch targets across the entire app.
+    - Added `active:scale-95` micro-interaction to all buttons for tactile mobile feedback.
+    - Refactored `Dialog` component to be fully responsive with `max-height` constraints and internal scrolling on small screens.
+    - Converted `AdminDashboard` and `TeacherDashboard` dynamic panel containers from hardcoded inline styles to responsive Tailwind utility classes (`p-4 md:p-6`).
+    - **Responsive Stats Cards**: Admin stats cards now render in a compact 3-column row on mobile (previously stacked vertically). Teacher stats cards render in a 2×2 grid on mobile (previously single column). Font sizes and padding scale responsively (`text-xl md:text-3xl`, `p-3 md:p-4`).
+    - **Mobile-First Data Tables**: Replaced horizontal-scroll table layouts in `StudentManager`, `StudentImport`, `SectionManager`, and `TeacherManager` with responsive stacked layouts — on mobile, rows display as a vertical card with primary info on line 1, secondary details on line 2 with inline labels, and actions as full-width touch-friendly buttons. Desktop retains the original grid table layout via `md:grid` breakpoints.
+    - **AttendanceGrid**: Updated all three tab views (Daily, Weekly, Monthly) with increased header font sizes and padding for improved readability.
+    - **ScannerTerminal**: Applied `min-h-[44px]` to window-type selector buttons, manual LRN input, and submit button for full mobile usability.
 

@@ -236,52 +236,73 @@ export default function StudentManager() {
         </div>
 
         {selectedSectionId && (
-          <div style={{ overflow: 'hidden', border: '0.5px solid var(--card-border)', borderRadius: 8 }}>
-            <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: COL_TEMPLATE, padding: '9px 16px' }}>
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl mt-6 overflow-hidden">
+            {/* Desktop Header */}
+            <div className="hidden md:grid grid-cols-[40px_2fr_2fr_2fr_1fr] px-4 py-3 bg-[var(--table-header-bg)] border-b border-[var(--card-border)]">
               {['', 'Full Name', 'LRN', 'Parent Phone', 'Actions'].map((c, idx) => (
-                <span key={idx} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>{c}</span>
+                <span key={idx} className="text-xs font-medium text-[var(--table-header-text)]">{c}</span>
               ))}
             </div>
             
             {loading ? (
-              <div style={{ padding: '32px', textAlign: 'center', fontSize: 13, color: 'var(--muted-text)' }}>Loading roster...</div>
+              <div className="p-8 text-center text-[13px] text-[var(--muted-text)]">Loading roster...</div>
             ) : filteredAndSortedStudents.length === 0 ? (
-              <div style={{ padding: '32px', textAlign: 'center', fontSize: 13, color: 'var(--muted-text)' }}>No students found matching your criteria.</div>
+              <div className="p-8 text-center text-[13px] text-[var(--muted-text)]">No students found matching your criteria.</div>
             ) : (
-              filteredAndSortedStudents.map((student, idx) => {
-                const isSelected = selectedStudentIds.has(student.id);
-                return (
-                  <div key={student.id} style={{
-                    display: 'grid', gridTemplateColumns: COL_TEMPLATE,
-                    padding: '9px 16px', alignItems: 'center',
-                    borderTop: '0.5px solid var(--card-border)',
-                    background: isSelected ? 'var(--row-hover)' : (idx % 2 === 1 ? 'var(--row-alt)' : 'transparent'),
-                    cursor: 'pointer',
-                    transition: 'background 0.15s'
-                  }} onClick={() => toggleStudentSelection(student.id)}>
-                    <div className="flex items-center" onClick={e => e.stopPropagation()}>
-                      <input 
-                        type="checkbox" 
-                        checked={isSelected}
-                        onChange={() => toggleStudentSelection(student.id)}
-                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                      />
+              <div className="flex flex-col">
+                {filteredAndSortedStudents.map((student, idx) => {
+                  const isSelected = selectedStudentIds.has(student.id);
+                  return (
+                    <div key={student.id} 
+                      onClick={() => toggleStudentSelection(student.id)}
+                      className={`flex flex-col md:grid md:grid-cols-[40px_2fr_2fr_2fr_1fr] md:items-center px-4 py-3 border-b border-[var(--card-border)] cursor-pointer transition-colors ${
+                        isSelected ? 'bg-[var(--row-hover)]' : (idx % 2 === 1 ? 'bg-[var(--row-alt)]' : 'bg-transparent')
+                      }`}
+                    >
+                      <div className="flex items-start md:contents w-full">
+                        {/* Checkbox */}
+                        <div className="flex-shrink-0 pt-0.5 md:pt-0" onClick={e => e.stopPropagation()}>
+                          <input 
+                            type="checkbox" 
+                            checked={isSelected}
+                            onChange={() => toggleStudentSelection(student.id)}
+                            className="w-[18px] h-[18px] md:w-4 md:h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                        </div>
+
+                        {/* Content Stack on Mobile / Grid on Desktop */}
+                        <div className="ml-3 md:ml-0 flex flex-col md:contents flex-1 min-w-0">
+                          {/* Primary Info */}
+                          <span className="text-[14px] md:text-xs font-medium text-[var(--body-text)] truncate">
+                            <span className="text-[var(--muted-text)] mr-1.5">{idx + 1}.</span> 
+                            {student.full_name}
+                          </span>
+
+                          {/* Secondary Info */}
+                          <div className="flex flex-wrap md:contents gap-x-3 gap-y-1 mt-1 md:mt-0 text-[13px] md:text-xs">
+                            <span className="text-[var(--body-text)]">
+                              <span className="md:hidden text-[var(--muted-text)] mr-1">LRN:</span>
+                              {student.lrn || '-'}
+                            </span>
+                            <span className="text-[var(--body-text)]">
+                              <span className="md:hidden text-[var(--muted-text)] mr-1">Phone:</span>
+                              {student.parent_phone || '-'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="mt-4 md:mt-0 ml-[30px] md:ml-0 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                        <Button variant="outline" size="sm" onClick={() => openEdit(student)} className="md:h-8 min-h-[44px] md:min-h-[32px] flex-1 md:flex-auto">Edit</Button>
+                        <Button variant="outline" size="sm" onClick={() => openDelete(student)} className="md:h-8 min-h-[44px] md:min-h-[32px] flex-1 md:flex-auto border-[var(--danger-text)] text-[var(--danger-text)]">
+                          Delete
+                        </Button>
+                      </div>
                     </div>
-                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--body-text)' }}>
-                      <span style={{ color: 'var(--muted-text)', marginRight: 6 }}>{idx + 1}.</span> 
-                      {student.full_name}
-                    </span>
-                    <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{student.lrn || '-'}</span>
-                    <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{student.parent_phone || '-'}</span>
-                    <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                      <Button variant="outline" size="sm" onClick={() => openEdit(student)}>Edit</Button>
-                      <Button variant="outline" size="sm" onClick={() => openDelete(student)} style={{ borderColor: 'var(--danger-text)', color: 'var(--danger-text)' }}>
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                )
-              })
+                  )
+                })}
+              </div>
             )}
           </div>
         )}

@@ -105,6 +105,7 @@ textarea {
   background-color: var(--input-bg);
   color:            var(--body-text);
   border-color:     var(--input-border);
+  min-height:       44px;
 }
 
 input[type="text"]:focus,
@@ -117,6 +118,7 @@ input[type="url"]:focus,
 textarea:focus {
   border-color: var(--input-focus);
   outline:      none;
+  box-shadow: 0 0 0 2px var(--input-focus);
 }
 
 /* Date / datetime-local / time inputs */
@@ -129,8 +131,9 @@ input[type="time"] {
   border-radius:     6px;
   padding:           5px 10px;
   font-size:         13px;
-  transition:        border-color 0.15s, background-color 0.15s;
+  transition:        border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
   color-scheme:      light;       /* ensures calendar popup matches */
+  min-height:        44px;
 }
 
 .dark input[type="date"],
@@ -147,6 +150,7 @@ input[type="datetime-local"]:focus,
 input[type="time"]:focus {
   border-color: var(--input-focus);
   outline:      none;
+  box-shadow: 0 0 0 2px var(--input-focus);
 }
 
 /* Select elements */
@@ -154,12 +158,14 @@ select {
   background-color: var(--input-bg);
   color:            var(--body-text);
   border-color:     var(--input-border);
-  transition:       border-color 0.15s, background-color 0.15s;
+  transition:       border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
+  min-height:       44px;
 }
 
 select:focus {
   border-color: var(--input-focus);
   outline:      none;
+  box-shadow: 0 0 0 2px var(--input-focus);
 }
 
 /* File input — the "Browse…" button */

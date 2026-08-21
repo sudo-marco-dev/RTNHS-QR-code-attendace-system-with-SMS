@@ -165,22 +165,17 @@ export default function AdminDashboard() {
             )}
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-3 md:gap-4">
               {[
                 { label: 'Total Students', value: stats.students },
                 { label: 'Active Sections', value: stats.sections },
                 { label: 'Registered Teachers', value: stats.teachers },
               ].map(s => (
-                <div key={s.label} style={{
-                  background: 'var(--stat-secondary-bg)',
-                  border: '0.5px solid var(--card-border)',
-                  borderRadius: 10,
-                  padding: '14px 16px',
-                }}>
-                  <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--stat-secondary-num)' }}>
+                <div key={s.label} className="bg-[var(--stat-secondary-bg)] border border-[var(--card-border)] rounded-xl p-3 md:p-4">
+                  <div className="text-xl md:text-3xl font-medium text-[var(--stat-secondary-num)]">
                     {s.value}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--stat-secondary-lbl)', marginTop: 2 }}>
+                  <div className="text-[10px] md:text-xs text-[var(--stat-secondary-lbl)] mt-1 md:mt-2 leading-tight">
                     {s.label}
                   </div>
                 </div>
@@ -188,12 +183,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Dynamic Panel */}
-            <div style={{
-              background: 'var(--card-bg)',
-              border: '0.5px solid var(--card-border)',
-              borderRadius: 10,
-              padding: '24px',
-            }}>
+            <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-4 md:p-6">
               <Routes>
                 <Route path="/" element={
                   <div className="py-12 text-center flex flex-col items-center">

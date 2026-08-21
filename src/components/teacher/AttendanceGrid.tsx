@@ -153,11 +153,11 @@ export default function AttendanceGrid() {
               </div>
               <div className="overflow-x-auto">
                 <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, overflow: 'hidden', minWidth: 600 }}>
-                  <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: '1fr 2fr 1fr 1fr', padding: '9px 14px' }}>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Time Scanned</span>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Student Name</span>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Section</span>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Status</span>
+                  <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: '1fr 2fr 1fr 1fr', padding: '12px 14px' }}>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--table-header-text)' }}>Time Scanned</span>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--table-header-text)' }}>Student Name</span>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--table-header-text)' }}>Section</span>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--table-header-text)' }}>Status</span>
                   </div>
 
                   {dailyLogs.length === 0 ? (
@@ -194,11 +194,11 @@ export default function AttendanceGrid() {
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, overflow: 'hidden', minWidth: 800 }}>
-                  <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr', padding: '9px 14px', gap: '8px' }}>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Student</span>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Section</span>
+                  <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr', padding: '12px 14px', gap: '8px' }}>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--table-header-text)' }}>Student</span>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--table-header-text)' }}>Section</span>
                     {weeklyHeaders.map(day => (
-                      <span key={day.toISOString()} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)', textAlign: 'center' }}>
+                      <span key={day.toISOString()} style={{ fontSize: 12, fontWeight: 500, color: 'var(--table-header-text)', textAlign: 'center' }}>
                         {format(day, 'EEE MM/dd')}
                       </span>
                     ))}
@@ -250,12 +250,12 @@ export default function AttendanceGrid() {
               </div>
               <div className="overflow-x-auto">
                 <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, overflow: 'hidden', minWidth: 600 }}>
-                  <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', padding: '9px 14px' }}>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Student Name</span>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>Section</span>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)', textAlign: 'center' }}>Present</span>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)', textAlign: 'center' }}>Late</span>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)', textAlign: 'center' }}>Absent</span>
+                  <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', padding: '12px 14px' }}>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--table-header-text)' }}>Student Name</span>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--table-header-text)' }}>Section</span>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--table-header-text)', textAlign: 'center' }}>Present</span>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--table-header-text)', textAlign: 'center' }}>Late</span>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--table-header-text)', textAlign: 'center' }}>Absent</span>
                   </div>
 
                   {monthlyData.length === 0 ? (

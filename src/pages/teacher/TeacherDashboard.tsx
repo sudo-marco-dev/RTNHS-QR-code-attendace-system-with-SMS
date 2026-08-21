@@ -143,12 +143,7 @@ export default function TeacherDashboard() {
 
         <main className="flex-1 overflow-auto">
           <div className="p-4 md:p-8">
-            <div style={{
-              background: 'var(--card-bg)',
-              border: '0.5px solid var(--card-border)',
-              borderRadius: 10,
-              padding: '24px',
-            }}>
+            <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-4 md:p-6">
               <Routes>
                 <Route path="/" element={
                   <div className="py-12 text-center flex flex-col items-center">

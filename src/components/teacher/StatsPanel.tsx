@@ -82,64 +82,44 @@ export default function StatsPanel() {
     <div className="space-y-6">
       <h2 style={{ fontSize: 15, fontWeight: 500, color: 'var(--page-title)' }}>Dashboard Statistics</h2>
       
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {/* Secondary Stat */}
-        <div style={{
-          background: 'var(--stat-secondary-bg)',
-          border: '0.5px solid var(--card-border)',
-          borderRadius: 10,
-          padding: '14px 16px',
-        }}>
-          <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--stat-secondary-num)' }}>
+        <div className="bg-[var(--stat-secondary-bg)] border border-[var(--card-border)] rounded-xl p-3 md:p-4">
+          <div className="text-xl md:text-3xl font-medium text-[var(--stat-secondary-num)]">
             {globalRate}%
           </div>
-          <div style={{ fontSize: 11, color: 'var(--stat-secondary-lbl)', marginTop: 2 }}>
-            GLOBAL ATTENDANCE RATE
+          <div className="text-[10px] md:text-xs text-[var(--stat-secondary-lbl)] mt-1 md:mt-2 leading-tight uppercase">
+            Global Rate
           </div>
         </div>
         
         {/* Primary Stat */}
-        <div style={{
-          background: 'var(--stat-primary-bg)',
-          border: '0.5px solid rgba(195,216,152,0.25)',
-          borderRadius: 10,
-          padding: '14px 16px',
-        }}>
-          <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--stat-primary-num)' }}>
+        <div className="bg-[var(--stat-primary-bg)] border border-[rgba(195,216,152,0.25)] rounded-xl p-3 md:p-4">
+          <div className="text-xl md:text-3xl font-medium text-[var(--stat-primary-num)]">
             {todayStats.present}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--stat-primary-lbl)', marginTop: 2 }}>
-            TODAY'S PRESENT
+          <div className="text-[10px] md:text-xs text-[var(--stat-primary-lbl)] mt-1 md:mt-2 leading-tight uppercase">
+            Today's Present
           </div>
         </div>
 
         {/* Secondary Stat */}
-        <div style={{
-          background: 'var(--stat-secondary-bg)',
-          border: '0.5px solid var(--card-border)',
-          borderRadius: 10,
-          padding: '14px 16px',
-        }}>
-          <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--stat-secondary-num)' }}>
+        <div className="bg-[var(--stat-secondary-bg)] border border-[var(--card-border)] rounded-xl p-3 md:p-4">
+          <div className="text-xl md:text-3xl font-medium text-[var(--stat-secondary-num)]">
             {todayStats.late}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--stat-secondary-lbl)', marginTop: 2 }}>
-            TODAY'S LATE
+          <div className="text-[10px] md:text-xs text-[var(--stat-secondary-lbl)] mt-1 md:mt-2 leading-tight uppercase">
+            Today's Late
           </div>
         </div>
 
         {/* Secondary Stat */}
-        <div style={{
-          background: 'var(--stat-secondary-bg)',
-          border: '0.5px solid var(--card-border)',
-          borderRadius: 10,
-          padding: '14px 16px',
-        }}>
-          <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--stat-secondary-num)' }}>
+        <div className="bg-[var(--stat-secondary-bg)] border border-[var(--card-border)] rounded-xl p-3 md:p-4">
+          <div className="text-xl md:text-3xl font-medium text-[var(--stat-secondary-num)]">
             {todayStats.absent}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--stat-secondary-lbl)', marginTop: 2 }}>
-            TODAY'S ABSENT
+          <div className="text-[10px] md:text-xs text-[var(--stat-secondary-lbl)] mt-1 md:mt-2 leading-tight uppercase">
+            Today's Absent
           </div>
         </div>
       </div>

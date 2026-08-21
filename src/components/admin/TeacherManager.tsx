@@ -166,10 +166,11 @@ export default function TeacherManager() {
         <Button onClick={() => setIsAddOpen(true)}>Add Teacher</Button>
       </div>
 
-      <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: COL_TEMPLATE, padding: '9px 16px' }}>
-          {COLS.map(c => <span key={c} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>{c}</span>)}
-        </div>
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl overflow-x-auto">
+        <div className="min-w-[700px]">
+          <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: COL_TEMPLATE, padding: '12px 16px' }}>
+            {COLS.map(c => <span key={c} style={{ fontSize: 12, fontWeight: 500, color: 'var(--table-header-text)' }}>{c}</span>)}
+          </div>
         {teachers.length === 0 ? (
           <div style={{ padding: '32px', textAlign: 'center', fontSize: 13, color: 'var(--muted-text)' }}>No teachers found.</div>
         ) : teachers.map((t, idx) => (
@@ -190,6 +191,7 @@ export default function TeacherManager() {
             </div>
           </div>
         ))}
+        </div>
       </div>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
