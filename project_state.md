@@ -28,9 +28,9 @@ The application is divided into three distinct user portals, protected by role-b
 - **Section Manager**: Manage class sections, grade levels, and 4-digit scanner PINs (Full CRUD).
 - **Schedule Manager**: Configure class schedules mapping subjects to sections and teachers (Full CRUD).
 - **Teacher Manager**: Onboard and manage teacher accounts with hard-deletion using Supabase Admin API (Full CRUD).
-- **Student Roster Management**: Manage individual students via `StudentManager` with Edit and Delete functionality.
-- **Student Import**: Bulk import student records via CSV or XLSX with fuzzy column matching. LRNs are optional.
-- **Export QR**: Generates PDF/PNG QR codes for all sections (Admin privilege bypasses teacher-assignment limits).
+- **Student Roster Management**: Manage individual students via `StudentManager` with Edit and Delete functionality. Features bulk selection with search, sorting (A-Z/Z-A), select all, deselect all, invert selection, and bulk deletion with confirmation dialog.
+- **Student Import**: Bulk import student records via drag-and-drop or file browse (CSV/XLSX) with fuzzy column matching. Import preview is fully selectable with search, sorting, select all/deselect/invert controls — only selected rows are imported. LRNs are optional.
+- **Export QR**: Generates PDF/PNG QR codes for sections. Students are individually selectable for export with search, sorting, select all/deselect/invert controls. Admin privilege bypasses teacher-assignment limits.
 
 ### 2. Teacher Portal (`/teacher/*`)
 **Purpose**: Tools for teachers to track and manage their classes' attendance.
@@ -39,7 +39,7 @@ The application is divided into three distinct user portals, protected by role-b
 - **Attendance Grid**: A detailed view of student attendance records for specific classes/schedules.
 - **Schedule Cards**: Visual representation of the teacher's assigned classes.
 - **Stats Panel**: Analytics and overview of attendance statistics.
-- **QR Exporter**: Generate and export QR codes for students in assigned sections.
+- **QR Exporter**: Generate and export QR codes for students in assigned sections. Students are individually selectable for bulk PDF export with search, sorting, and selection controls.
 
 ### 3. Scanner Terminal (`/scanner`)
 **Purpose**: A dedicated kiosk/terminal interface for scanning student QR codes as they enter/leave.
@@ -66,4 +66,8 @@ The application is divided into three distinct user portals, protected by role-b
   - Integrated `QrExporter` into the Admin Dashboard, enabling admins to bypass teacher assignment checks and export QR codes for any section.
   - Implemented comprehensive CRUD functionalities across the Admin Dashboard (Teachers, Subjects, Sections, Schedules, and a new `StudentManager` module).
   - Adjusted PDF QR bulk export to CR80 standard ID sizing with dynamic text wrapping and conditional LRN rendering.
+  - **QR Exporter Selection Controls**: Added selectable student list for bulk QR PDF export with search, sorting (A-Z/Z-A), select all, deselect all, and invert selection. Only selected students are exported.
+  - **Student Manager Bulk Deletion**: Added checkbox selection, search, sorting, and bulk delete with confirmation dialog to the Student Roster Management panel. Rows are numbered for easy tracking.
+  - **Drag-and-Drop Import**: Upgraded batch student import with a stylized drag-and-drop zone (also supports click-to-browse).
+  - **Selectable Import Preview**: Import preview table now features full selection controls (checkboxes, select all, deselect, invert, search, sorting). Only selected rows from the preview are inserted on confirm.
 

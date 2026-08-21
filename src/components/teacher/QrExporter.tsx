@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import QRCode from 'qrcode'
 import { jsPDF } from 'jspdf'
 import { Card, CardContent } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { Select } from '../ui/Select'
+import { Input } from '../ui/Input'
 import { useAuth } from '../../context/AuthContext'
 
 interface Student {
@@ -23,6 +24,9 @@ export default function QrExporter() {
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const fetchSections = async () => {
@@ -62,6 +66,7 @@ export default function QrExporter() {
     const fetchStudents = async () => {
       if (!selectedSectionId) {
         setStudents([])
+        setSelectedStudentIds(new Set())
         return
       }
       setLoading(true)
@@ -72,16 +77,55 @@ export default function QrExporter() {
         .order('full_name')
         
       if (data) {
-        setStudents(data.map((s: any) => ({
+        const mapped = data.map((s: any) => ({
           ...s,
           section_name: s.sections.name,
           section_grade: s.sections.grade_level
-        })))
+        }))
+        setStudents(mapped)
+        setSelectedStudentIds(new Set(mapped.map((s: any) => s.id)))
       }
       setLoading(false)
     }
     fetchStudents()
   }, [selectedSectionId])
+
+  const filteredAndSortedStudents = useMemo(() => {
+    let result = [...students]
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      result = result.filter(s => s.full_name.toLowerCase().includes(query) || (s.lrn && s.lrn.toLowerCase().includes(query)))
+    }
+    result.sort((a, b) => {
+      const compare = a.full_name.localeCompare(b.full_name)
+      return sortOrder === 'asc' ? compare : -compare
+    })
+    return result
+  }, [students, searchQuery, sortOrder])
+
+  const handleSelectAll = () => {
+    setSelectedStudentIds(new Set(filteredAndSortedStudents.map(s => s.id)))
+  }
+
+  const handleDeselectAll = () => {
+    setSelectedStudentIds(new Set())
+  }
+
+  const handleInvertSelection = () => {
+    const current = new Set(selectedStudentIds)
+    const inverted = new Set<string>()
+    filteredAndSortedStudents.forEach(s => {
+      if (!current.has(s.id)) inverted.add(s.id)
+    })
+    setSelectedStudentIds(inverted)
+  }
+
+  const toggleStudentSelection = (id: string) => {
+    const next = new Set(selectedStudentIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedStudentIds(next)
+  }
 
   const downloadSingleQR = async (student: Student) => {
     try {
@@ -98,7 +142,8 @@ export default function QrExporter() {
   }
 
   const downloadBatchPDF = async () => {
-    if (students.length === 0) return
+    const studentsToExport = students.filter(s => selectedStudentIds.has(s.id))
+    if (studentsToExport.length === 0) return
     setGenerating(true)
     
     try {
@@ -118,8 +163,8 @@ export default function QrExporter() {
       const xSpacing = cardWidth + 15
       const ySpacing = cardHeight + 15
       
-      for (let i = 0; i < students.length; i++) {
-        const student = students[i]
+      for (let i = 0; i < studentsToExport.length; i++) {
+        const student = studentsToExport[i]
         
         // Add new page if we exceed 8 cards (2 columns * 4 rows)
         if (i > 0 && i % (cols * rows) === 0) {
@@ -180,7 +225,7 @@ export default function QrExporter() {
         doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize)
       }
       
-      const secLabel = students[0].section_grade + "_" + students[0].section_name
+      const secLabel = studentsToExport[0].section_grade + "_" + studentsToExport[0].section_name
       doc.save(`QR_Batch_${secLabel.replace(/\s+/g, '_')}.pdf`)
       
     } catch (err) {
@@ -215,8 +260,8 @@ export default function QrExporter() {
               </Select>
               
               {students.length > 0 && (
-                <Button onClick={downloadBatchPDF} disabled={generating}>
-                  {generating ? 'Generating PDF...' : 'Download Full Section PDF'}
+                <Button onClick={downloadBatchPDF} disabled={generating || selectedStudentIds.size === 0}>
+                  {generating ? 'Generating PDF...' : `Download Selected (${selectedStudentIds.size})`}
                 </Button>
               )}
             </div>
@@ -224,32 +269,66 @@ export default function QrExporter() {
 
           {selectedSectionId && (
             <div style={{ paddingTop: 20, borderTop: '0.5px solid var(--card-border)' }}>
-              <h3 style={{ marginBottom: 14, fontSize: 14, fontWeight: 500, color: 'var(--page-title)' }}>Student Roster ({students.length})</h3>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                <h3 style={{ fontSize: 14, fontWeight: 500, color: 'var(--page-title)' }}>
+                  Student Roster ({filteredAndSortedStudents.length})
+                </h3>
+                
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input 
+                    placeholder="Search name or LRN..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-48 h-9 text-sm"
+                  />
+                  <Button variant="outline" size="sm" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}>
+                    Sort {sortOrder === 'asc' ? 'A-Z' : 'Z-A'}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleSelectAll}>Select All</Button>
+                  <Button variant="outline" size="sm" onClick={handleDeselectAll}>Deselect</Button>
+                  <Button variant="outline" size="sm" onClick={handleInvertSelection}>Invert</Button>
+                </div>
+              </div>
               
               {loading ? (
                 <div style={{ fontSize: 13, color: 'var(--muted-text)' }}>Loading roster...</div>
-              ) : students.length === 0 ? (
-                <div style={{ fontSize: 13, color: 'var(--muted-text)' }}>No students found in this section.</div>
+              ) : filteredAndSortedStudents.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--muted-text)' }}>No students found matching your criteria.</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {students.map(student => (
-                    <div key={student.id} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '12px 14px',
-                      border: '0.5px solid var(--card-border)',
-                      borderRadius: 8,
-                      background: 'var(--row-alt)',
-                      transition: 'background 0.15s',
-                    }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--body-text)' }}>{student.full_name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--muted-text)', marginTop: 2 }}>LRN: {student.lrn}</div>
+                  {filteredAndSortedStudents.map(student => {
+                    const isSelected = selectedStudentIds.has(student.id);
+                    return (
+                      <div key={student.id} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 14px',
+                        border: isSelected ? '1.5px solid var(--accent)' : '0.5px solid var(--card-border)',
+                        borderRadius: 8,
+                        background: isSelected ? 'var(--row-hover)' : 'var(--row-alt)',
+                        transition: 'all 0.15s',
+                        cursor: 'pointer',
+                        opacity: isSelected ? 1 : 0.6
+                      }} onClick={() => toggleStudentSelection(student.id)}>
+                        <div className="flex items-center gap-3">
+                          <input 
+                            type="checkbox" 
+                            checked={isSelected}
+                            onChange={() => toggleStudentSelection(student.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            style={{ cursor: 'pointer' }}
+                          />
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--body-text)' }}>{student.full_name}</div>
+                            <div style={{ fontSize: 11, color: 'var(--muted-text)', marginTop: 2 }}>LRN: {student.lrn}</div>
+                          </div>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); downloadSingleQR(student); }}>
+                          Export PNG
+                        </Button>
                       </div>
-                      <Button variant="outline" size="sm" onClick={() => downloadSingleQR(student)}>
-                        Export PNG
-                      </Button>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>

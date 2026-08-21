@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -20,6 +20,10 @@ export default function StudentManager() {
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(false)
   
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set())
+
   // Edit State
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editStudent, setEditStudent] = useState<Student | null>(null)
@@ -31,6 +35,67 @@ export default function StudentManager() {
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // Bulk Delete State
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+
+  const filteredAndSortedStudents = useMemo(() => {
+    let result = [...students]
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      result = result.filter(s => s.full_name.toLowerCase().includes(query) || (s.lrn && s.lrn.toLowerCase().includes(query)))
+    }
+    result.sort((a, b) => {
+      const compare = a.full_name.localeCompare(b.full_name)
+      return sortOrder === 'asc' ? compare : -compare
+    })
+    return result
+  }, [students, searchQuery, sortOrder])
+
+  const handleSelectAll = () => {
+    setSelectedStudentIds(new Set(filteredAndSortedStudents.map(s => s.id)))
+  }
+
+  const handleDeselectAll = () => {
+    setSelectedStudentIds(new Set())
+  }
+
+  const handleInvertSelection = () => {
+    const current = new Set(selectedStudentIds)
+    const inverted = new Set<string>()
+    filteredAndSortedStudents.forEach(s => {
+      if (!current.has(s.id)) inverted.add(s.id)
+    })
+    setSelectedStudentIds(inverted)
+  }
+
+  const toggleStudentSelection = (id: string) => {
+    const next = new Set(selectedStudentIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedStudentIds(next)
+  }
+
+  const handleBulkDeleteConfirm = async () => {
+    if (selectedStudentIds.size === 0) return
+    setIsBulkDeleting(true)
+    
+    const idsToDelete = Array.from(selectedStudentIds)
+    const { error: deleteError } = await supabase
+      .from('students')
+      .delete()
+      .in('id', idsToDelete)
+
+    if (deleteError) {
+      alert(`Failed to delete selected students: ${deleteError.message}`)
+    } else {
+      setIsBulkDeleteOpen(false)
+      setSelectedStudentIds(new Set())
+      fetchStudents()
+    }
+    setIsBulkDeleting(false)
+  }
+
   useEffect(() => {
     const fetchSections = async () => {
       const { data } = await supabase.from('sections').select('id, name, grade_level').order('grade_level')
@@ -40,14 +105,21 @@ export default function StudentManager() {
   }, [])
 
   const fetchStudents = async () => {
-    if (!selectedSectionId) return
+    if (!selectedSectionId) {
+      setStudents([])
+      setSelectedStudentIds(new Set())
+      return
+    }
     setLoading(true)
     const { data } = await supabase
       .from('students')
       .select('*')
       .eq('section_id', selectedSectionId)
       .order('full_name')
-    if (data) setStudents(data)
+    if (data) {
+      setStudents(data)
+      setSelectedStudentIds(new Set())
+    }
     setLoading(false)
   }
 
@@ -113,7 +185,7 @@ export default function StudentManager() {
     setIsDeleting(false)
   }
 
-  const COL_TEMPLATE = '2fr 2fr 2fr 1fr'
+  const COL_TEMPLATE = '40px 2fr 2fr 2fr 1fr'
 
   return (
     <div className="space-y-6">
@@ -122,49 +194,94 @@ export default function StudentManager() {
       </div>
 
       <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, padding: '20px' }}>
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>
-            Select Section to View/Manage
-          </label>
-          <Select value={selectedSectionId} onChange={(e) => setSelectedSectionId(e.target.value)}>
-            <option value="" disabled>Select a section...</option>
-            {sections.map(s => (
-              <option key={s.id} value={s.id}>{s.grade_level} - {s.name}</option>
-            ))}
-          </Select>
+        <div style={{ marginBottom: 20, display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end', justifyContent: 'space-between' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>
+              Select Section to View/Manage
+            </label>
+            <div className="flex items-center gap-4">
+              <Select value={selectedSectionId} onChange={(e) => setSelectedSectionId(e.target.value)} className="min-w-[200px]">
+                <option value="" disabled>Select a section...</option>
+                {sections.map(s => (
+                  <option key={s.id} value={s.id}>{s.grade_level} - {s.name}</option>
+                ))}
+              </Select>
+              {selectedStudentIds.size > 0 && (
+                <Button 
+                  onClick={() => setIsBulkDeleteOpen(true)} 
+                  style={{ background: 'var(--danger)', color: 'white', border: 'none', whiteSpace: 'nowrap' }}
+                >
+                  Delete Selected ({selectedStudentIds.size})
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {selectedSectionId && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Input 
+                placeholder="Search name or LRN..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-48 h-9 text-sm"
+              />
+              <Button variant="outline" size="sm" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}>
+                Sort {sortOrder === 'asc' ? 'A-Z' : 'Z-A'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleSelectAll}>Select All</Button>
+              <Button variant="outline" size="sm" onClick={handleDeselectAll}>Deselect</Button>
+              <Button variant="outline" size="sm" onClick={handleInvertSelection}>Invert</Button>
+            </div>
+          )}
         </div>
 
         {selectedSectionId && (
           <div style={{ overflow: 'hidden', border: '0.5px solid var(--card-border)', borderRadius: 8 }}>
             <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: COL_TEMPLATE, padding: '9px 16px' }}>
-              {['Full Name', 'LRN', 'Parent Phone', 'Actions'].map(c => (
-                <span key={c} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>{c}</span>
+              {['', 'Full Name', 'LRN', 'Parent Phone', 'Actions'].map((c, idx) => (
+                <span key={idx} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>{c}</span>
               ))}
             </div>
             
             {loading ? (
               <div style={{ padding: '32px', textAlign: 'center', fontSize: 13, color: 'var(--muted-text)' }}>Loading roster...</div>
-            ) : students.length === 0 ? (
-              <div style={{ padding: '32px', textAlign: 'center', fontSize: 13, color: 'var(--muted-text)' }}>No students found in this section.</div>
+            ) : filteredAndSortedStudents.length === 0 ? (
+              <div style={{ padding: '32px', textAlign: 'center', fontSize: 13, color: 'var(--muted-text)' }}>No students found matching your criteria.</div>
             ) : (
-              students.map((student, idx) => (
-                <div key={student.id} style={{
-                  display: 'grid', gridTemplateColumns: COL_TEMPLATE,
-                  padding: '9px 16px', alignItems: 'center',
-                  borderTop: '0.5px solid var(--card-border)',
-                  background: idx % 2 === 1 ? 'var(--row-alt)' : 'transparent',
-                }}>
-                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--body-text)' }}>{student.full_name}</span>
-                  <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{student.lrn || '-'}</span>
-                  <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{student.parent_phone || '-'}</span>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => openEdit(student)}>Edit</Button>
-                    <Button variant="outline" size="sm" onClick={() => openDelete(student)} style={{ borderColor: 'var(--danger-text)', color: 'var(--danger-text)' }}>
-                      Delete
-                    </Button>
+              filteredAndSortedStudents.map((student, idx) => {
+                const isSelected = selectedStudentIds.has(student.id);
+                return (
+                  <div key={student.id} style={{
+                    display: 'grid', gridTemplateColumns: COL_TEMPLATE,
+                    padding: '9px 16px', alignItems: 'center',
+                    borderTop: '0.5px solid var(--card-border)',
+                    background: isSelected ? 'var(--row-hover)' : (idx % 2 === 1 ? 'var(--row-alt)' : 'transparent'),
+                    cursor: 'pointer',
+                    transition: 'background 0.15s'
+                  }} onClick={() => toggleStudentSelection(student.id)}>
+                    <div className="flex items-center" onClick={e => e.stopPropagation()}>
+                      <input 
+                        type="checkbox" 
+                        checked={isSelected}
+                        onChange={() => toggleStudentSelection(student.id)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--body-text)' }}>
+                      <span style={{ color: 'var(--muted-text)', marginRight: 6 }}>{idx + 1}.</span> 
+                      {student.full_name}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{student.lrn || '-'}</span>
+                    <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{student.parent_phone || '-'}</span>
+                    <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                      <Button variant="outline" size="sm" onClick={() => openEdit(student)}>Edit</Button>
+                      <Button variant="outline" size="sm" onClick={() => openDelete(student)} style={{ borderColor: 'var(--danger-text)', color: 'var(--danger-text)' }}>
+                        Delete
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         )}
@@ -218,6 +335,28 @@ export default function StudentManager() {
             <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
             <Button onClick={handleDeleteConfirm} disabled={isDeleting} style={{ background: 'var(--danger)', color: 'white', border: 'none' }}>
               {isDeleting ? 'Deleting...' : 'Delete Student'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={isBulkDeleteOpen} onOpenChange={setIsBulkDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Bulk Deletion</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p style={{ fontSize: 14, color: 'var(--body-text)' }}>
+              Are you sure you want to delete <strong>{selectedStudentIds.size}</strong> selected student(s)?
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--danger-text)', marginTop: 8 }}>
+              This action cannot be undone. All attendance logs associated with these students will also be deleted.
+            </p>
+          </div>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={() => setIsBulkDeleteOpen(false)}>Cancel</Button>
+            <Button onClick={handleBulkDeleteConfirm} disabled={isBulkDeleting} style={{ background: 'var(--danger)', color: 'white', border: 'none' }}>
+              {isBulkDeleting ? 'Deleting...' : `Delete ${selectedStudentIds.size} Students`}
             </Button>
           </div>
         </DialogContent>

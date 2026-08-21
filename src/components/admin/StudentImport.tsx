@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../ui/Button'
 import { Select } from '../ui/Select'
+import { Input } from '../ui/Input'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/Tabs'
 
 interface Section {
@@ -13,6 +14,7 @@ interface Section {
 }
 
 interface ParsedStudent {
+  _tempId: string
   full_name: string
   lrn: string
   parent_phone: string
@@ -25,6 +27,11 @@ export default function StudentImport() {
   const [singleStudent, setSingleStudent] = useState({ full_name: '', lrn: '', parent_phone: '' })
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const fetchSections = async () => {
@@ -101,24 +108,52 @@ export default function StudentImport() {
     }
 
     const validRows: ParsedStudent[] = rows.map(row => {
-      const mapped: ParsedStudent = { full_name: '', lrn: '', parent_phone: '' }
+      const mapped: ParsedStudent = { _tempId: crypto.randomUUID(), full_name: '', lrn: '', parent_phone: '' }
       for (const [originalKey, canonicalField] of Object.entries(headerMap)) {
         const value = String(row[originalKey] ?? '').trim()
-        if (value && !mapped[canonicalField]) {
-          mapped[canonicalField] = value
+        if (value && !(mapped as any)[canonicalField]) {
+          (mapped as any)[canonicalField] = value
         }
       }
       return mapped
     }).filter(row => row.full_name)
 
     setParsedData(validRows)
+    setSelectedStudentIds(new Set(validRows.map(r => r._tempId)))
     setStatus({ message: `Successfully parsed ${validRows.length} rows.`, type: 'info' })
   }
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const filteredAndSortedData = useMemo(() => {
+    let result = [...parsedData]
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      result = result.filter(s => s.full_name.toLowerCase().includes(query) || (s.lrn && s.lrn.toLowerCase().includes(query)))
+    }
+    result.sort((a, b) => {
+      const compare = a.full_name.localeCompare(b.full_name)
+      return sortOrder === 'asc' ? compare : -compare
+    })
+    return result
+  }, [parsedData, searchQuery, sortOrder])
 
+  const handleSelectAll = () => setSelectedStudentIds(new Set(filteredAndSortedData.map(s => s._tempId)))
+  const handleDeselectAll = () => setSelectedStudentIds(new Set())
+  const handleInvertSelection = () => {
+    const current = new Set(selectedStudentIds)
+    const inverted = new Set<string>()
+    filteredAndSortedData.forEach(s => {
+      if (!current.has(s._tempId)) inverted.add(s._tempId)
+    })
+    setSelectedStudentIds(inverted)
+  }
+  const toggleSelection = (id: string) => {
+    const next = new Set(selectedStudentIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedStudentIds(next)
+  }
+
+  const processFile = (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase()
 
     if (ext === 'csv') {
@@ -149,17 +184,46 @@ export default function StudentImport() {
     }
   }
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) processFile(file)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) processFile(file)
+  }
+
   const handleImport = async () => {
     if (!selectedSection) {
       setStatus({ message: 'Please select a section first.', type: 'error' })
       return
     }
-    if (parsedData.length === 0) return
+    const toInsert = parsedData.filter(s => selectedStudentIds.has(s._tempId))
+    if (toInsert.length === 0) {
+      setStatus({ message: 'No students selected to import.', type: 'error' })
+      return
+    }
 
     setLoading(true)
     setStatus({ message: 'Importing records...', type: 'info' })
 
-    const recordsToInsert = parsedData.map(student => ({
+    const recordsToInsert = toInsert.map(student => ({
       section_id: selectedSection,
       full_name: student.full_name,
       lrn: student.lrn || null,
@@ -174,6 +238,7 @@ export default function StudentImport() {
     } else {
       setStatus({ message: `Successfully imported ${recordsToInsert.length} students!`, type: 'success' })
       setParsedData([])
+      setSelectedStudentIds(new Set())
     }
     setLoading(false)
   }
@@ -215,7 +280,7 @@ export default function StudentImport() {
     info:    { color: 'var(--body-text)', background: 'var(--card-bg)', border: '0.5px solid var(--card-border)' },
   }
 
-  const PREVIEW_COL = '2fr 1fr 1fr'
+  const PREVIEW_COL = '40px 2fr 1fr 1fr'
 
   return (
     <div className="space-y-6">
@@ -288,53 +353,108 @@ export default function StudentImport() {
               <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>
                 Upload File (.csv, .xlsx, .xls)
               </label>
-              <input
-                type="file"
-                accept=".csv,.xlsx,.xls"
-                onChange={handleFileUpload}
+              
+              <div 
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
                 style={{
-                  display: 'block', width: '100%', fontSize: 12,
-                  color: 'var(--body-text)',
+                  border: isDragging ? '2px dashed var(--accent)' : '2px dashed var(--card-border)',
+                  backgroundColor: isDragging ? 'var(--row-hover)' : 'transparent',
+                  padding: '32px 20px',
+                  textAlign: 'center',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  position: 'relative'
                 }}
-              />
-              <p style={{ marginTop: 4, fontSize: 11, color: 'var(--muted-text)' }}>
-                Needs a column for student name (e.g. "Full Name", "Name", "Student Name"). LRN and Phone columns are auto-detected if present.
-              </p>
+              >
+                <input
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleFileUpload}
+                  style={{
+                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                    opacity: 0, cursor: 'pointer'
+                  }}
+                />
+                <div style={{ pointerEvents: 'none' }}>
+                  <svg className="w-8 h-8 mx-auto mb-3" style={{ color: isDragging ? 'var(--accent)' : 'var(--muted-text)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <p style={{ fontSize: 14, fontWeight: 500, color: isDragging ? 'var(--accent)' : 'var(--body-text)' }}>
+                    {isDragging ? 'Drop file here' : 'Drag & drop your file here, or click to browse'}
+                  </p>
+                  <p style={{ marginTop: 8, fontSize: 11, color: 'var(--muted-text)' }}>
+                    Needs a column for student name (e.g. "Full Name", "Name"). LRN and Phone columns are auto-detected if present.
+                  </p>
+                </div>
+              </div>
             </div>
 
             {parsedData.length > 0 && (
               <div className="space-y-4" style={{ marginTop: 20 }}>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--page-title)' }}>
-                    Preview ({parsedData.length} rows)
+                    Preview ({filteredAndSortedData.length} rows)
                   </h3>
-                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3">
                     {!selectedSection && (
-                      <span style={{ fontSize: 12, color: 'var(--danger-text)' }}>⚠ Select a section above first</span>
+                      <span style={{ fontSize: 12, color: 'var(--danger-text)' }}>⚠ Select a section above</span>
                     )}
-                    <Button onClick={handleImport} disabled={loading || !selectedSection}>
-                      {loading ? 'Processing...' : 'Confirm & Insert'}
+                    <Button onClick={handleImport} disabled={loading || !selectedSection || selectedStudentIds.size === 0}>
+                      {loading ? 'Processing...' : `Confirm & Insert (${selectedStudentIds.size})`}
                     </Button>
                   </div>
                 </div>
 
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <Input 
+                    placeholder="Search name or LRN..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-48 h-9 text-sm"
+                  />
+                  <Button variant="outline" size="sm" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}>
+                    Sort {sortOrder === 'asc' ? 'A-Z' : 'Z-A'}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleSelectAll}>Select All</Button>
+                  <Button variant="outline" size="sm" onClick={handleDeselectAll}>Deselect</Button>
+                  <Button variant="outline" size="sm" onClick={handleInvertSelection}>Invert</Button>
+                </div>
+
                 <div style={{ maxHeight: 384, overflowY: 'auto', border: '0.5px solid var(--card-border)', borderRadius: 8, overflow: 'hidden' }}>
                   <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: PREVIEW_COL, padding: '9px 14px' }}>
-                    {['Full Name', 'LRN', 'Parent Phone'].map(c => (
-                      <span key={c} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>{c}</span>
+                    {['', 'Full Name', 'LRN', 'Parent Phone'].map((c, i) => (
+                      <span key={i} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>{c}</span>
                     ))}
                   </div>
-                  {parsedData.map((row, idx) => (
-                    <div key={idx} style={{
-                      display: 'grid', gridTemplateColumns: PREVIEW_COL,
-                      padding: '8px 14px', borderTop: '0.5px solid var(--card-border)',
-                      background: idx % 2 === 1 ? 'var(--row-alt)' : 'transparent',
-                    }}>
-                      <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{row.full_name}</span>
-                      <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{row.lrn}</span>
-                      <span style={{ fontSize: 12, color: 'var(--muted-text)' }}>{row.parent_phone}</span>
-                    </div>
-                  ))}
+                  {filteredAndSortedData.map((row, idx) => {
+                    const isSelected = selectedStudentIds.has(row._tempId)
+                    return (
+                      <div key={row._tempId} style={{
+                        display: 'grid', gridTemplateColumns: PREVIEW_COL,
+                        padding: '8px 14px', borderTop: '0.5px solid var(--card-border)',
+                        background: isSelected ? 'var(--row-hover)' : (idx % 2 === 1 ? 'var(--row-alt)' : 'transparent'),
+                        cursor: 'pointer', transition: 'background 0.15s'
+                      }} onClick={() => toggleSelection(row._tempId)}>
+                        <div className="flex items-center" onClick={e => e.stopPropagation()}>
+                          <input 
+                            type="checkbox" 
+                            checked={isSelected}
+                            onChange={() => toggleSelection(row._tempId)}
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                        </div>
+                        <span style={{ fontSize: 12, color: 'var(--body-text)' }}>
+                          <span style={{ color: 'var(--muted-text)', marginRight: 6 }}>{idx + 1}.</span> 
+                          {row.full_name}
+                        </span>
+                        <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{row.lrn}</span>
+                        <span style={{ fontSize: 12, color: 'var(--muted-text)' }}>{row.parent_phone}</span>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
