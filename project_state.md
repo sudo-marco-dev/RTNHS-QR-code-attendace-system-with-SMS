@@ -79,4 +79,15 @@ The application is divided into three distinct user portals, protected by role-b
     - **Mobile-First Data Tables**: Replaced horizontal-scroll table layouts in `StudentManager`, `StudentImport`, `SectionManager`, and `TeacherManager` with responsive stacked layouts — on mobile, rows display as a vertical card with primary info on line 1, secondary details on line 2 with inline labels, and actions as full-width touch-friendly buttons. Desktop retains the original grid table layout via `md:grid` breakpoints.
     - **AttendanceGrid**: Updated all three tab views (Daily, Weekly, Monthly) with increased header font sizes and padding for improved readability.
     - **ScannerTerminal**: Applied `min-h-[44px]` to window-type selector buttons, manual LRN input, and submit button for full mobile usability.
+  - **Scanner Terminal — Inline Debug Mode & Mobile Camera Flip (August 2026)**:
+    - Replaced the popup `DebugScanModal` with an inline `[ Live Mode ] | [ Debug Mode ]` segmented toggle sharing the exact same camera stream and `jsQR` processing loop (no second stream, no popup, no dual permission requests).
+    - Debug mode displays an inline feedback overlay (Raw Payload String, Student Name Match, Validation Status) and **bypasses** the Supabase `attendance_logs` insert entirely.
+    - Added a **Flip Camera** button (`SwitchCamera`) that stops the active `MediaStream` tracks and re-requests `getUserMedia` toggling `facingMode` between `environment` (rear) and `user` (front).
+    - Added a **Grant / Retry Camera Access** button to the camera error state, allowing recovery from denied access or a wrong camera selection.
+  - **Scanner Terminal — Camera Permission Stability (August 2026)**:
+    - Fixed a stale-closure bug where toggling modes changed the `onScan` callback identity, re-firing the camera effect and re-prompting for camera permission. `onScan` is now held in a ref and `scanFrame` uses stable deps.
+    - Refactored `TabsContent` to keep inactive tabs mounted and hidden (`display: none`) instead of unmounting them, so camera streams survive tab switches without re-requesting `getUserMedia`.
+  - **Scanner Terminal — Scan History Fix & SMS Toggle (August 2026)**:
+    - Fixed empty Scan History by switching `ScanHistoryTab` to the **service-role** Supabase client (the anon JWT had no `SELECT` RLS policy on `attendance_logs`).
+    - Added an **SMS Notifications** toggle switch in the right column; when OFF, `sendAttendanceSms()` and the `sms_logs` insert are skipped entirely while attendance recording continues.
 

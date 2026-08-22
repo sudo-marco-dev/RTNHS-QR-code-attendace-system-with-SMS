@@ -168,6 +168,17 @@ select:focus {
   box-shadow: 0 0 0 2px var(--input-focus);
 }
 
+/* Fix option contrast in light and dark mode */
+select option {
+  background-color: #ffffff;
+  color: #1a3318;
+}
+
+.dark select option {
+  background-color: #071a0e;
+  color: #c3d898;
+}
+
 /* File input — the "Browse…" button */
 input[type="file"] {
   color: var(--body-text);

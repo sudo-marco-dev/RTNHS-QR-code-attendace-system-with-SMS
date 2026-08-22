@@ -17,12 +17,27 @@ interface Assignment {
 }
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-const TIME_OPTIONS = [
-  '7:30 AM', '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM',
-  '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM',
-  '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM',
-  '3:00 PM', '3:30 PM', '4:00 PM', '4:30 PM', '5:00 PM'
-]
+
+const to12Hour = (time24: string) => {
+  if (!time24) return '';
+  const [hours, minutes] = time24.split(':');
+  let h = parseInt(hours, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  h = h ? h : 12;
+  return `${h}:${minutes} ${ampm}`;
+};
+
+const to24Hour = (time12: string) => {
+  if (!time12) return '';
+  const match = time12.match(/^(\d+):(\d+)\s*(AM|PM)$/i);
+  if (!match) return '';
+  let [_, hStr, m, ampm] = match;
+  let h = parseInt(hStr, 10);
+  if (ampm.toUpperCase() === 'PM' && h < 12) h += 12;
+  if (ampm.toUpperCase() === 'AM' && h === 12) h = 0;
+  return `${h.toString().padStart(2, '0')}:${m}`;
+};
 
 export default function ScheduleManager() {
   const [assignments, setAssignments] = useState<Assignment[]>([])
@@ -82,9 +97,10 @@ export default function ScheduleManager() {
     e.preventDefault()
     if (selectedDays.length === 0) { setError('Please select at least one day of the week.'); return }
 
-    const startIndex = TIME_OPTIONS.indexOf(startTime)
-    const endIndex = TIME_OPTIONS.indexOf(endTime)
-    if (startIndex === -1 || endIndex === -1 || startIndex >= endIndex) {
+    if (!startTime || !endTime) {
+      setError('Please select both Start Time and End Time.'); return
+    }
+    if (startTime >= endTime) {
       setError('End Time must be later than Start Time.'); return
     }
 
@@ -93,7 +109,7 @@ export default function ScheduleManager() {
 
     const { error: insertError } = await supabase.from('teacher_assignments').insert({
       teacher_id: teacherId, subject_id: subjectId, section_id: sectionId,
-      time_slot: `${startTime} - ${endTime}`, days_of_week: selectedDays
+      time_slot: `${to12Hour(startTime)} - ${to12Hour(endTime)}`, days_of_week: selectedDays
     })
 
     if (insertError) {
@@ -114,8 +130,8 @@ export default function ScheduleManager() {
       teacherId: a.teacher_id,
       subjectId: a.subject_id,
       sectionId: a.section_id,
-      startTime: times[0] || '',
-      endTime: times[1] || '',
+      startTime: to24Hour(times[0] || ''),
+      endTime: to24Hour(times[1] || ''),
       selectedDays: a.days_of_week
     })
     setError(null)
@@ -140,9 +156,10 @@ export default function ScheduleManager() {
     if (!editData) return
     if (editData.selectedDays.length === 0) { setError('Please select at least one day.'); return }
 
-    const startIndex = TIME_OPTIONS.indexOf(editData.startTime)
-    const endIndex = TIME_OPTIONS.indexOf(editData.endTime)
-    if (startIndex === -1 || endIndex === -1 || startIndex >= endIndex) {
+    if (!editData.startTime || !editData.endTime) {
+      setError('Please select both Start Time and End Time.'); return
+    }
+    if (editData.startTime >= editData.endTime) {
       setError('End Time must be later than Start Time.'); return
     }
 
@@ -151,7 +168,7 @@ export default function ScheduleManager() {
 
     const { error: updateError } = await supabase.from('teacher_assignments').update({
       teacher_id: editData.teacherId, subject_id: editData.subjectId, section_id: editData.sectionId,
-      time_slot: `${editData.startTime} - ${editData.endTime}`, days_of_week: editData.selectedDays
+      time_slot: `${to12Hour(editData.startTime)} - ${to12Hour(editData.endTime)}`, days_of_week: editData.selectedDays
     }).eq('id', editData.id)
 
     if (updateError) {
@@ -256,17 +273,23 @@ export default function ScheduleManager() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>Start Time</label>
-                <Select required value={startTime} onChange={(e) => setStartTime(e.target.value)}>
-                  <option value="" disabled>Select start time...</option>
-                  {TIME_OPTIONS.map(time => <option key={time} value={time}>{time}</option>)}
-                </Select>
+                <input 
+                  type="time" 
+                  required 
+                  value={startTime} 
+                  onChange={(e) => setStartTime(e.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box' }}
+                />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>End Time</label>
-                <Select required value={endTime} onChange={(e) => setEndTime(e.target.value)}>
-                  <option value="" disabled>Select end time...</option>
-                  {TIME_OPTIONS.map(time => <option key={time} value={time}>{time}</option>)}
-                </Select>
+                <input 
+                  type="time" 
+                  required 
+                  value={endTime} 
+                  onChange={(e) => setEndTime(e.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box' }}
+                />
               </div>
             </div>
             <div>
@@ -321,15 +344,23 @@ export default function ScheduleManager() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>Start Time</label>
-                  <Select required value={editData.startTime} onChange={(e) => setEditData({ ...editData, startTime: e.target.value })}>
-                    {TIME_OPTIONS.map(time => <option key={time} value={time}>{time}</option>)}
-                  </Select>
+                  <input 
+                    type="time" 
+                    required 
+                    value={editData.startTime} 
+                    onChange={(e) => setEditData({ ...editData, startTime: e.target.value })}
+                    style={{ width: '100%', boxSizing: 'border-box' }}
+                  />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 4 }}>End Time</label>
-                  <Select required value={editData.endTime} onChange={(e) => setEditData({ ...editData, endTime: e.target.value })}>
-                    {TIME_OPTIONS.map(time => <option key={time} value={time}>{time}</option>)}
-                  </Select>
+                  <input 
+                    type="time" 
+                    required 
+                    value={editData.endTime} 
+                    onChange={(e) => setEditData({ ...editData, endTime: e.target.value })}
+                    style={{ width: '100%', boxSizing: 'border-box' }}
+                  />
                 </div>
               </div>
               <div>

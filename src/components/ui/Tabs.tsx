@@ -49,6 +49,17 @@ export const TabsTrigger = ({ value, className, children }: { value: string; cla
 
 export const TabsContent = ({ value, className, children }: { value: string; className?: string; children: React.ReactNode }) => {
   const ctx = useContext(TabsContext);
-  if (ctx?.activeTab !== value) return null;
-  return <div className={cn("mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", className)}>{children}</div>;
+  const isActive = ctx?.activeTab === value;
+  // Keep inactive content mounted (hidden) rather than unmounting it. This
+  // preserves long-lived resources like camera streams across tab switches,
+  // preventing repeated getUserMedia() permission prompts.
+  return (
+    <div
+      className={cn("mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", className)}
+      style={{ display: isActive ? undefined : 'none' }}
+      aria-hidden={!isActive}
+    >
+      {children}
+    </div>
+  );
 };

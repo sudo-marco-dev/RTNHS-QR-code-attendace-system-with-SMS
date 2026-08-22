@@ -36,16 +36,45 @@ export default function Login() {
     <div style={{
       minHeight: '100vh',
       display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
+      flexDirection: 'column',
       background: 'var(--page-bg)',
       transition: 'background 0.2s',
     }}>
-      {/* Theme toggle pinned top-right */}
-      <div style={{ position: 'fixed', top: 16, right: 16 }}>
+      {/* Top Header Navigation */}
+      <header style={{
+        padding: '16px 24px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        background: 'var(--card-bg)',
+        borderBottom: '1px solid var(--card-border)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 36, height: 36, background: 'var(--primary)', borderRadius: 8,
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c3d898" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--page-title)' }}>RTNHS</span>
+        </div>
         <ThemeToggle />
-      </div>
+      </header>
 
+      {/* Main Content */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px',
+      }}>
       <div style={{
         width: '100%',
         maxWidth: 380,
@@ -167,7 +196,48 @@ export default function Login() {
           >
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/scanner')}
+            style={{
+              marginTop: 16,
+              padding: '12px',
+              borderRadius: 8,
+              border: '2px solid var(--primary)',
+              background: 'var(--card-bg)',
+              color: 'var(--primary)',
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              letterSpacing: '0.02em',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              boxShadow: '0 2px 8px rgba(4,71,28,0.1)',
+            }}
+            onMouseOver={e => {
+              e.currentTarget.style.background = 'var(--primary)';
+              e.currentTarget.style.color = 'var(--primary-text)';
+            }}
+            onMouseOut={e => {
+              e.currentTarget.style.background = 'var(--card-bg)';
+              e.currentTarget.style.color = 'var(--primary)';
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <rect x="7" y="7" width="3" height="3"/>
+              <rect x="14" y="7" width="3" height="3"/>
+              <rect x="7" y="14" width="3" height="3"/>
+              <rect x="14" y="14" width="3" height="3"/>
+            </svg>
+            Open Scanner Terminal
+          </button>
         </form>
+      </div>
       </div>
     </div>
   )
