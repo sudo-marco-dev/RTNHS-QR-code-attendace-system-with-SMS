@@ -96,5 +96,11 @@ The application is divided into three distinct user portals, protected by role-b
     - Added a robust **Hydration System**: On reload or restart, the scanner automatically finds the active window for the current day, locks the camera via an `isHydrating` guard, and uses `supabaseServiceRole` to fetch all previously scanned `attendance_logs` to rebuild the local cache (`scannedIds`).
     - Fixed a severe race condition during rapid double-scans by locking `scannedIdsRef` synchronously in memory before the async database insert completes.
     - Added a `UNIQUE(student_id, scan_window_id)` database constraint to `attendance_logs` to strictly prevent duplicate scans across multiple devices.
+  - **Detailed Excel Attendance Exporter (August 2026)**:
+    - Built a robust multi-sheet Excel generator using `exceljs` in `src/lib/excelExport.ts`.
+    - Features a **Monthly Summary** tab that aggregates daily statuses (P, AM-L, PM-L, L, AM-A, PM-A, A).
+    - Features individual **Weekly Breakdown** tabs (grouped by ISO week, Monday-Friday) that utilize complex merged headers (AM IN, PM IN, PM OUT).
+    - The weekly tabs export precise `hh:mm a` timestamps for every scan, seamlessly handling missing/absent logs.
+    - Exports are fully color-coded for quick visual status identification.
 
 

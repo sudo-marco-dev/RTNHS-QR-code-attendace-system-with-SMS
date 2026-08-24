@@ -11,6 +11,7 @@ import TeacherManager from '../../components/admin/TeacherManager'
 import SubjectManager from '../../components/admin/SubjectManager'
 import ScheduleManager from '../../components/admin/ScheduleManager'
 import QrExporter from '../../components/teacher/QrExporter'
+import AttendanceExporter from '../../components/admin/AttendanceExporter'
 
 export default function AdminDashboard() {
   const { role } = useAuth()
@@ -51,6 +52,7 @@ export default function AdminDashboard() {
     { name: 'Subjects', path: '/admin/subjects' },
     { name: 'Schedules', path: '/admin/schedules' },
     { name: 'Export QR', path: '/admin/qr-export' },
+    { name: 'Export Attendance', path: '/admin/attendance-export' },
   ]
 
   const SidebarContent = () => (
@@ -199,6 +201,7 @@ export default function AdminDashboard() {
                 <Route path="subjects" element={<SubjectManager />} />
                 <Route path="schedules" element={<ScheduleManager />} />
                 <Route path="qr-export" element={<QrExporter />} />
+                <Route path="attendance-export" element={<AttendanceExporter />} />
               </Routes>
             </div>
           </div>
