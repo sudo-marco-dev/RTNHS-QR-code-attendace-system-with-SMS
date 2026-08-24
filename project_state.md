@@ -90,4 +90,11 @@ The application is divided into three distinct user portals, protected by role-b
   - **Scanner Terminal — Scan History Fix & SMS Toggle (August 2026)**:
     - Fixed empty Scan History by switching `ScanHistoryTab` to the **service-role** Supabase client (the anon JWT had no `SELECT` RLS policy on `attendance_logs`).
     - Added an **SMS Notifications** toggle switch in the right column; when OFF, `sendAttendanceSms()` and the `sms_logs` insert are skipped entirely while attendance recording continues.
+  - **Scanner Terminal — Window Persistence & Time Configuration (August 2026)**:
+    - Added `morning_in`, `afternoon_in`, and `afternoon_out` time range configurations to the `sections` table. Admin can configure these defaults in `SectionManager`.
+    - **Scanner Terminal** now automatically suggests the appropriate window type based on the current time and the section's configured timeframes.
+    - Added a robust **Hydration System**: On reload or restart, the scanner automatically finds the active window for the current day, locks the camera via an `isHydrating` guard, and uses `supabaseServiceRole` to fetch all previously scanned `attendance_logs` to rebuild the local cache (`scannedIds`).
+    - Fixed a severe race condition during rapid double-scans by locking `scannedIdsRef` synchronously in memory before the async database insert completes.
+    - Added a `UNIQUE(student_id, scan_window_id)` database constraint to `attendance_logs` to strictly prevent duplicate scans across multiple devices.
+
 

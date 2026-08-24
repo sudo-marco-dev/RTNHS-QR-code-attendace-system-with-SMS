@@ -9,6 +9,12 @@ interface Section {
   name: string
   grade_level: string
   scanner_pin: string
+  morning_in_start: string
+  morning_in_end: string
+  afternoon_in_start: string
+  afternoon_in_end: string
+  afternoon_out_start: string
+  afternoon_out_end: string
 }
 
 export default function SectionManager() {
@@ -21,6 +27,14 @@ export default function SectionManager() {
   const [gradeLevel, setGradeLevel] = useState('')
   const [pin, setPin] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  // Default time windows based on typical school hours (7:00-12:15, 1:15-4:15)
+  const [morningInStart, setMorningInStart] = useState('06:00:00')
+  const [morningInEnd, setMorningInEnd] = useState('07:30:00')
+  const [afternoonInStart, setAfternoonInStart] = useState('12:30:00')
+  const [afternoonInEnd, setAfternoonInEnd] = useState('13:30:00')
+  const [afternoonOutStart, setAfternoonOutStart] = useState('16:00:00')
+  const [afternoonOutEnd, setAfternoonOutEnd] = useState('17:00:00')
 
   // Edit State
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -61,7 +75,13 @@ export default function SectionManager() {
     const { error: insertError } = await supabase.from('sections').insert({
       name,
       grade_level: gradeLevel,
-      scanner_pin: pin
+      scanner_pin: pin,
+      morning_in_start: morningInStart,
+      morning_in_end: morningInEnd,
+      afternoon_in_start: afternoonInStart,
+      afternoon_in_end: afternoonInEnd,
+      afternoon_out_start: afternoonOutStart,
+      afternoon_out_end: afternoonOutEnd
     })
 
     if (insertError) {
@@ -71,6 +91,12 @@ export default function SectionManager() {
       setName('')
       setGradeLevel('')
       setPin('')
+      setMorningInStart('06:00:00')
+      setMorningInEnd('07:30:00')
+      setAfternoonInStart('12:30:00')
+      setAfternoonInEnd('13:30:00')
+      setAfternoonOutStart('16:00:00')
+      setAfternoonOutEnd('17:00:00')
       fetchSections()
     }
     setLoading(false)
@@ -107,7 +133,13 @@ export default function SectionManager() {
       .update({
         name: editSection.name,
         grade_level: editSection.grade_level,
-        scanner_pin: editSection.scanner_pin
+        scanner_pin: editSection.scanner_pin,
+        morning_in_start: editSection.morning_in_start,
+        morning_in_end: editSection.morning_in_end,
+        afternoon_in_start: editSection.afternoon_in_start,
+        afternoon_in_end: editSection.afternoon_in_end,
+        afternoon_out_start: editSection.afternoon_out_start,
+        afternoon_out_end: editSection.afternoon_out_end
       })
       .eq('id', editSection.id)
 
@@ -204,6 +236,46 @@ export default function SectionManager() {
                 <Button type="button" variant="secondary" onClick={generatePin}>Generate</Button>
               </div>
             </div>
+
+            <div className="pt-2 border-t border-[var(--card-border)]">
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--body-text)', marginBottom: 8 }}>Scan Time Windows</label>
+              
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 2 }}>Morning In (Start)</label>
+                    <Input type="time" step="1" required value={morningInStart} onChange={(e) => setMorningInStart(e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 2 }}>Morning In (End)</label>
+                    <Input type="time" step="1" required value={morningInEnd} onChange={(e) => setMorningInEnd(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 2 }}>Afternoon In (Start)</label>
+                    <Input type="time" step="1" required value={afternoonInStart} onChange={(e) => setAfternoonInStart(e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 2 }}>Afternoon In (End)</label>
+                    <Input type="time" step="1" required value={afternoonInEnd} onChange={(e) => setAfternoonInEnd(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 2 }}>Afternoon Out (Start)</label>
+                    <Input type="time" step="1" required value={afternoonOutStart} onChange={(e) => setAfternoonOutStart(e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 2 }}>Afternoon Out (End)</label>
+                    <Input type="time" step="1" required value={afternoonOutEnd} onChange={(e) => setAfternoonOutEnd(e.target.value)} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="flex justify-end pt-4 space-x-2">
               <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save Section'}</Button>
@@ -234,6 +306,46 @@ export default function SectionManager() {
                   <Button type="button" variant="secondary" onClick={() => setEditSection({ ...editSection, scanner_pin: Math.floor(1000 + Math.random() * 9000).toString() })}>Generate</Button>
                 </div>
               </div>
+
+              <div className="pt-2 border-t border-[var(--card-border)]">
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--body-text)', marginBottom: 8 }}>Scan Time Windows</label>
+                
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 2 }}>Morning In (Start)</label>
+                      <Input type="time" step="1" required value={editSection.morning_in_start || ''} onChange={(e) => setEditSection({ ...editSection, morning_in_start: e.target.value })} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 2 }}>Morning In (End)</label>
+                      <Input type="time" step="1" required value={editSection.morning_in_end || ''} onChange={(e) => setEditSection({ ...editSection, morning_in_end: e.target.value })} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 2 }}>Afternoon In (Start)</label>
+                      <Input type="time" step="1" required value={editSection.afternoon_in_start || ''} onChange={(e) => setEditSection({ ...editSection, afternoon_in_start: e.target.value })} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 2 }}>Afternoon In (End)</label>
+                      <Input type="time" step="1" required value={editSection.afternoon_in_end || ''} onChange={(e) => setEditSection({ ...editSection, afternoon_in_end: e.target.value })} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 2 }}>Afternoon Out (Start)</label>
+                      <Input type="time" step="1" required value={editSection.afternoon_out_start || ''} onChange={(e) => setEditSection({ ...editSection, afternoon_out_start: e.target.value })} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: 'var(--sidebar-muted)', marginBottom: 2 }}>Afternoon Out (End)</label>
+                      <Input type="time" step="1" required value={editSection.afternoon_out_end || ''} onChange={(e) => setEditSection({ ...editSection, afternoon_out_end: e.target.value })} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex justify-end pt-4 space-x-2">
                 <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
                 <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Changes'}</Button>

@@ -49,6 +49,15 @@ interface DebugResult {
   student: Student | null
 }
 
+interface SectionSettings {
+  morning_in_start: string
+  morning_in_end: string
+  afternoon_in_start: string
+  afternoon_in_end: string
+  afternoon_out_start: string
+  afternoon_out_end: string
+}
+
 const OFFLINE_KEY = 'rtnhs_offline_queue'
 
 function loadOfflineQueue(): OfflineEntry[] {
@@ -74,6 +83,8 @@ export default function ScannerTerminal() {
   const [debugMode, setDebugMode] = useState(false)
   const [debugResult, setDebugResult] = useState<DebugResult | null>(null)
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [sectionSettings, setSectionSettings] = useState<SectionSettings | null>(null)
+  const [isHydrating, setIsHydrating] = useState(false)
   const navigate = useNavigate()
 
   type SmsStatus = 'idle' | 'sending' | 'sent' | 'failed' | 'no_phone';
@@ -86,23 +97,49 @@ export default function ScannerTerminal() {
 
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flushingRef = useRef(false)
+  const scannedIdsRef = useRef<Set<string>>(new Set())
 
   const handleWindowChange = useCallback((window: ScanWindow | null) => {
     if (!window && scanWindow) {
+      setIsHydrating(false)
       setCompletedWindows(prev => {
         if (!prev.includes(scanWindow.window_type)) {
           return [...prev, scanWindow.window_type]
         }
         return prev
       })
-      const order: WindowType[] = ['morning_in', 'afternoon_in', 'afternoon_out']
-      const currIdx = order.indexOf(scanWindow.window_type)
-      if (currIdx < order.length - 1 && !completedWindows.includes(order[currIdx + 1])) {
-        setWindowType(order[currIdx + 1])
+      // Auto-suggest next window based on current time
+      if (sectionSettings) {
+        const now = new Date()
+        const timeStr = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        let nextType: WindowType = 'morning_in'
+        
+        if (timeStr >= sectionSettings.afternoon_out_start) {
+          nextType = 'afternoon_out'
+        } else if (timeStr >= sectionSettings.afternoon_in_start) {
+          nextType = 'afternoon_in'
+        }
+        
+        if (!completedWindows.includes(nextType) && nextType !== scanWindow.window_type) {
+          setWindowType(nextType)
+        } else {
+          // fallback to chronological
+          const order: WindowType[] = ['morning_in', 'afternoon_in', 'afternoon_out']
+          const currIdx = order.indexOf(scanWindow.window_type)
+          if (currIdx < order.length - 1 && !completedWindows.includes(order[currIdx + 1])) {
+            setWindowType(order[currIdx + 1])
+          }
+        }
+      } else {
+        const order: WindowType[] = ['morning_in', 'afternoon_in', 'afternoon_out']
+        const currIdx = order.indexOf(scanWindow.window_type)
+        if (currIdx < order.length - 1 && !completedWindows.includes(order[currIdx + 1])) {
+          setWindowType(order[currIdx + 1])
+        }
       }
     }
     setScanWindow(window)
-  }, [scanWindow, completedWindows])
+  }, [scanWindow, completedWindows, sectionSettings])
 
   const handleWindowTabClick = (type: WindowType) => {
     if (scanWindow) return
@@ -113,7 +150,7 @@ export default function ScannerTerminal() {
     }
   }
 
-  // Load section roster after authentication
+  // Load section roster and settings after authentication
   useEffect(() => {
     if (!sectionId) return
     const fetchStudents = async () => {
@@ -124,8 +161,69 @@ export default function ScannerTerminal() {
         .order('full_name')
       if (data) setStudents(data as Student[])
     }
+    const fetchSection = async () => {
+      const { data } = await supabase.from('sections').select('*').eq('id', sectionId).single()
+      if (data) {
+        setSectionSettings(data as SectionSettings)
+        
+        // Initial window suggestion
+        const now = new Date()
+        const timeStr = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        if (timeStr >= data.afternoon_out_start) setWindowType('afternoon_out')
+        else if (timeStr >= data.afternoon_in_start) setWindowType('afternoon_in')
+        else setWindowType('morning_in')
+      }
+    }
+    const hydrateScanWindow = async () => {
+      const startOfDay = new Date()
+      startOfDay.setHours(0,0,0,0)
+      
+      const { data } = await supabase
+        .from('scan_windows')
+        .select('*')
+        .eq('section_id', sectionId)
+        .gte('opened_at', startOfDay.toISOString())
+        .in('status', ['open', 'late'])
+        .order('opened_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        
+      if (data) {
+        setScanWindow(data as ScanWindow)
+        setWindowType(data.window_type)
+        setIsHydrating(true) // Start hydrating when an existing window is found
+      }
+    }
     fetchStudents()
+    fetchSection()
+    hydrateScanWindow()
   }, [sectionId])
+
+  // Hydrate scannedIds when a scanWindow becomes active
+  useEffect(() => {
+    if (!scanWindow) {
+      // Don't clear scannedIds on window close immediately if you want to see them, 
+      // but usually we want a fresh state for the next window.
+      // Wait, we DO clear it when batch absent is called, or on change.
+      // Let's only fetch when we get a new scan window.
+      return
+    }
+    const fetchLogs = async () => {
+      setIsHydrating(true)
+      const { data } = await supabaseServiceRole
+        .from('attendance_logs')
+        .select('student_id')
+        .eq('scan_window_id', scanWindow.id)
+      
+      if (data) {
+        const newSet = new Set(data.map(d => d.student_id))
+        setScannedIds(newSet)
+        scannedIdsRef.current = newSet
+      }
+      setIsHydrating(false)
+    }
+    fetchLogs()
+  }, [scanWindow?.id])
 
   // Auto-flush offline queue on mount and every 30 seconds
   useEffect(() => {
@@ -179,6 +277,9 @@ export default function ScannerTerminal() {
   }, [students])
 
   const processCode = useCallback(async (code: string) => {
+    // Prevent any scanning if we are still fetching the previous state from Supabase
+    if (isHydrating) return
+
     // Debug mode short-circuits before any Supabase insert.
     if (debugMode) {
       processDebugCode(code)
@@ -201,11 +302,15 @@ export default function ScannerTerminal() {
       return
     }
 
-    if (scannedIds.has(student.id)) {
+    if (scannedIdsRef.current.has(student.id)) {
       playDuplicate()
       showFeedback({ studentName: student.full_name, lrn: student.lrn, status: 'DUPLICATE', message: 'Already scanned in this window' })
       return
     }
+
+    // Synchronously mark as scanned to prevent rapid double-scan race conditions
+    scannedIdsRef.current.add(student.id)
+    setScannedIds(new Set(scannedIdsRef.current))
 
     const scanTime = new Date()
     const status: 'PRESENT' | 'LATE' = scanWindow.status === 'open' ? 'PRESENT' : 'LATE'
@@ -267,9 +372,8 @@ export default function ScannerTerminal() {
     }
 
     playSuccess()
-    setScannedIds(prev => new Set([...prev, student.id]))
     showFeedback({ studentName: student.full_name, lrn: student.lrn, status, message: status === 'PRESENT' ? 'Attendance recorded' : 'Marked as Late' })
-  }, [students, scanWindow, scannedIds, debugMode, processDebugCode, sendSms])
+  }, [students, scanWindow, debugMode, processDebugCode, sendSms, isHydrating])
 
   const handleBatchAbsent = useCallback(async (windowId: string) => {
     const unscanned = students.filter(s => !scannedIds.has(s.id))
@@ -290,6 +394,7 @@ export default function ScannerTerminal() {
       setOfflineQueue(newQueue)
     }
     // Reset for next window
+    scannedIdsRef.current.clear()
     setScannedIds(new Set())
   }, [students, scannedIds])
 
@@ -342,7 +447,16 @@ export default function ScannerTerminal() {
             </div>
           )}
           <button
-            onClick={() => { setPhase('pin'); setSectionId(''); setSectionName(''); setStudents([]); handleWindowChange(null); setScannedIds(new Set()); setCompletedWindows([]) }}
+            onClick={() => { 
+              setPhase('pin') 
+              setSectionId('') 
+              setSectionName('') 
+              setStudents([]) 
+              handleWindowChange(null) 
+              scannedIdsRef.current.clear()
+              setScannedIds(new Set()) 
+              setCompletedWindows([]) 
+            }}
             className="text-xs px-3 py-1.5 rounded-md border border-[var(--card-border)] text-[var(--sidebar-muted)] hover:text-[var(--body-text)] hover:bg-[var(--row-alt)] transition-colors"
           >
             Change
@@ -414,7 +528,14 @@ export default function ScannerTerminal() {
                 </button>
               </div>
 
-              <CameraStream onScan={processCode} active={phase === 'scanning'} debug={debugMode} />
+              {isHydrating && (
+                <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded-xl text-blue-400 text-sm font-semibold flex items-center justify-center gap-2 shadow-sm animate-pulse">
+                  <i className="ti ti-loader-2 animate-spin text-lg" />
+                  Loading Previous Scans...
+                </div>
+              )}
+
+              <CameraStream onScan={processCode} active={phase === 'scanning' && !isHydrating} debug={debugMode} />
 
               {/* Inline Debug Feedback Overlay */}
               {debugMode && debugResult && (
