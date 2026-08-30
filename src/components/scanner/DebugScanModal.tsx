@@ -74,7 +74,7 @@ export default function DebugScanModal({ open, onOpenChange, students }: DebugSc
               <CameraStream onScan={(code) => {
                 setPayload(code);
                 validateCode(code);
-              }} active={open} />
+              }} active={open} esp32Url={null} />
             </div>
           </div>
 

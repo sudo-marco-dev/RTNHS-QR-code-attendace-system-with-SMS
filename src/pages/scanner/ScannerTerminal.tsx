@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabase'
 import PinScreen from '../../components/scanner/PinScreen'
 import CameraStream from '../../components/scanner/CameraStream'
+import type { CameraStreamHandle } from '../../components/scanner/CameraStream'
+import ESP32Settings from '../../components/scanner/ESP32Settings'
 import StateControls from '../../components/scanner/StateControls'
 import type { ScanWindow, WindowType } from '../../components/scanner/StateControls'
 import { playSuccess, playDuplicate, playError } from '../../components/scanner/AudioFeedback'
@@ -94,6 +96,10 @@ export default function ScannerTerminal() {
 
   const [completedWindows, setCompletedWindows] = useState<WindowType[]>([])
   const [confirmReopenType, setConfirmReopenType] = useState<WindowType | null>(null)
+
+  // ESP32-CAM state
+  const [esp32Url, setEsp32Url] = useState<string | null>(null)
+  const cameraStreamRef = useRef<CameraStreamHandle>(null)
 
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flushingRef = useRef(false)
@@ -340,6 +346,49 @@ export default function ScannerTerminal() {
       saveOfflineQueue(newQueue)
       setOfflineQueue(newQueue)
     } else {
+      // Capture & upload face verification photo (fire-and-forget)
+      if (logData?.id && cameraStreamRef.current) {
+        const photoData = cameraStreamRef.current.captureFacePhoto()
+        if (photoData) {
+          // Upload async — don't block scan feedback
+          const uploadPhoto = async () => {
+            try {
+              const dateStr = scanTime.toISOString().split('T')[0]
+              const fileName = `${sectionId}/${dateStr}/${student.id}_${windowType}_${Date.now()}.jpg`
+              // Convert base64 to blob
+              const base64 = photoData.split(',')[1]
+              const byteString = atob(base64)
+              const ab = new ArrayBuffer(byteString.length)
+              const ia = new Uint8Array(ab)
+              for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i)
+              }
+              const blob = new Blob([ab], { type: 'image/jpeg' })
+
+              const { data: uploadData, error: uploadError } = await supabaseServiceRole.storage
+                .from('verification-photos')
+                .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false })
+
+              if (!uploadError && uploadData) {
+                const { data: urlData } = supabaseServiceRole.storage
+                  .from('verification-photos')
+                  .getPublicUrl(fileName)
+                if (urlData?.publicUrl) {
+                  await supabaseServiceRole.from('attendance_logs')
+                    .update({ verification_photo_url: urlData.publicUrl })
+                    .eq('id', logData!.id)
+                }
+              } else {
+                console.error('[PHOTO] Upload failed:', uploadError)
+              }
+            } catch (photoErr) {
+              console.error('[PHOTO] Error:', photoErr)
+            }
+          }
+          uploadPhoto() // fire-and-forget
+        }
+      }
+
       if (sendSms) {
         console.log('[SMS] Scan success, student:', student.full_name, 'parent_phone:', student.parent_phone)
         // Send SMS
@@ -535,7 +584,10 @@ export default function ScannerTerminal() {
                 </div>
               )}
 
-              <CameraStream onScan={processCode} active={phase === 'scanning' && !isHydrating} debug={debugMode} />
+              {/* ESP32-CAM Connection Settings */}
+              <ESP32Settings onConnectionChange={setEsp32Url} />
+
+              <CameraStream ref={cameraStreamRef} onScan={processCode} active={phase === 'scanning' && !isHydrating} debug={debugMode} esp32Url={esp32Url} />
 
               {/* Inline Debug Feedback Overlay */}
               {debugMode && debugResult && (

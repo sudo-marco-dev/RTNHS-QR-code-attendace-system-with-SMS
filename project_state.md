@@ -102,5 +102,11 @@ The application is divided into three distinct user portals, protected by role-b
     - Features individual **Weekly Breakdown** tabs (grouped by ISO week, Monday-Friday) that utilize complex merged headers (AM IN, PM IN, PM OUT).
     - The weekly tabs export precise `hh:mm a` timestamps for every scan, seamlessly handling missing/absent logs.
     - Exports are fully color-coded for quick visual status identification.
+  - **Dual-Camera Face Verification System (August 2026)**:
+    - Integrated **ESP32-CAM** support via mDNS (`rtnhs-scanner.local`) to act as a dedicated, low-latency, headless QR scanner.
+    - Re-architected `CameraStream.tsx` to support simultaneous dual streams: **ESP32-CAM** (for QR scanning) and **Device Front Camera** (for anti-fraud face verification).
+    - Features a Picture-in-Picture (PiP) UI with robust rotation controls for inverted ESP32 mounts, configurable polling delays to protect hardware limits, and ping-retry logic to handle network jitter.
+    - On successful scan, automatically captures a compressed verification photo and uploads it seamlessly to Supabase Storage without blocking SMS or UI feedback.
+    - Added a new **Photo Verification** module in the Admin Dashboard with grid views, date/window filtering, and click-to-enlarge functionality for manual attendance review.
 
 
