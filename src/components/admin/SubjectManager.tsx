@@ -105,7 +105,7 @@ export default function SubjectManager() {
     setIsDeleting(false)
   }
 
-  const COL_TEMPLATE = '1fr 3fr 1fr'
+
 
   return (
     <div className="space-y-6">
@@ -114,31 +114,42 @@ export default function SubjectManager() {
         <Button onClick={() => setIsAddOpen(true)}>Add Subject</Button>
       </div>
 
-      <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ background: 'var(--table-header-bg)', display: 'grid', gridTemplateColumns: COL_TEMPLATE, padding: '9px 16px' }}>
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl overflow-hidden mt-4">
+        {/* Desktop Header */}
+        <div className="hidden md:grid md:grid-cols-[1fr_3fr_1fr] px-4 py-3 bg-[var(--table-header-bg)] border-b border-[var(--card-border)]">
           {['Subject Code', 'Subject Name', 'Actions'].map(c => (
-            <span key={c} style={{ fontSize: 11, fontWeight: 500, color: 'var(--table-header-text)' }}>{c}</span>
+            <span key={c} className="text-xs font-medium text-[var(--table-header-text)]">{c}</span>
           ))}
         </div>
+        
         {subjects.length === 0 ? (
-          <div style={{ padding: '32px', textAlign: 'center', fontSize: 13, color: 'var(--muted-text)' }}>No subjects found.</div>
-        ) : subjects.map((sub, idx) => (
-          <div key={sub.id} style={{
-            display: 'grid', gridTemplateColumns: COL_TEMPLATE,
-            padding: '9px 16px', alignItems: 'center',
-            borderTop: '0.5px solid var(--card-border)',
-            background: idx % 2 === 1 ? 'var(--row-alt)' : 'transparent',
-          }}>
-            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--body-text)' }}>{sub.code}</span>
-            <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{sub.name}</span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => openEdit(sub)}>Edit</Button>
-              <Button variant="outline" size="sm" onClick={() => openDelete(sub)} style={{ borderColor: 'var(--danger-text)', color: 'var(--danger-text)' }}>
-                Delete
-              </Button>
-            </div>
+          <div className="p-8 text-center text-[13px] text-[var(--muted-text)]">No subjects found.</div>
+        ) : (
+          <div className="flex flex-col">
+            {subjects.map((sub, idx) => (
+              <div key={sub.id} className="flex flex-col md:grid md:grid-cols-[1fr_3fr_1fr] md:items-center px-4 py-4 md:py-3 border-b border-[var(--card-border)] hover:bg-[var(--row-hover)] transition-colors">
+                
+                {/* Content Stack on Mobile / Grid on Desktop */}
+                <div className="flex flex-col md:contents flex-1 min-w-0 mb-3 md:mb-0">
+                  <span className="text-[14px] md:text-sm font-medium text-[var(--body-text)]">
+                    <span className="md:hidden text-[var(--muted-text)] mr-1.5">{idx + 1}.</span> 
+                    {sub.code}
+                  </span>
+                  
+                  <div className="mt-1 md:mt-0">
+                    <span className="text-[14px] md:text-sm text-[var(--body-text)]">{sub.name}</span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => openEdit(sub)} className="flex-1 md:flex-auto min-h-[44px] md:min-h-[32px]">Edit</Button>
+                  <Button variant="outline" size="sm" onClick={() => openDelete(sub)} className="flex-1 md:flex-auto min-h-[44px] md:min-h-[32px] border-[var(--danger-text)] text-[var(--danger-text)]">Delete</Button>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>

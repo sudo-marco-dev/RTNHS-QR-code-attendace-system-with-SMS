@@ -284,7 +284,7 @@ export default function StudentImport() {
     <div className="space-y-6">
       <h2 style={{ fontSize: 15, fontWeight: 500, color: 'var(--page-title)' }}>Student Roster Management</h2>
 
-      <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, padding: '20px' }}>
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-4 md:p-5">
         <div style={{ marginBottom: 20 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>
             1. Select Target Section
@@ -421,7 +421,7 @@ export default function StudentImport() {
                   <Button variant="outline" size="sm" onClick={handleInvertSelection}>Invert</Button>
                 </div>
 
-                <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl overflow-y-auto max-h-[384px]">
+                <div className="border-t border-[var(--card-border)] -mx-4 md:-mx-5 mt-5 pt-2 overflow-y-auto max-h-[384px]">
                   {/* Desktop Header */}
                   <div className="hidden md:grid grid-cols-[40px_2fr_1fr_1fr] px-4 py-3 bg-[var(--table-header-bg)] border-b border-[var(--card-border)]">
                     {['', 'Full Name', 'LRN', 'Parent Phone'].map((c, i) => (
@@ -435,8 +435,8 @@ export default function StudentImport() {
                       return (
                         <div key={row._tempId}
                           onClick={() => toggleSelection(row._tempId)}
-                          className={`flex items-start md:grid md:grid-cols-[40px_2fr_1fr_1fr] md:items-center px-4 py-3 border-b border-[var(--card-border)] cursor-pointer transition-colors ${
-                            isSelected ? 'bg-[var(--row-hover)]' : (idx % 2 === 1 ? 'bg-[var(--row-alt)]' : 'bg-transparent')
+                          className={`flex items-start md:grid md:grid-cols-[40px_2fr_1fr_1fr] md:items-center px-4 py-3 border-b border-[var(--card-border)] cursor-pointer transition-colors hover:bg-[var(--row-hover)] ${
+                            isSelected ? 'bg-[var(--row-hover)]' : 'bg-transparent'
                           }`}
                         >
                           {/* Checkbox */}
@@ -452,7 +452,7 @@ export default function StudentImport() {
                           {/* Content Stack on Mobile / Grid on Desktop */}
                           <div className="ml-3 md:ml-0 flex flex-col md:contents flex-1 min-w-0">
                             {/* Primary Info */}
-                            <span className="text-[14px] md:text-xs font-medium text-[var(--body-text)] truncate">
+                            <span className="text-[14px] md:text-xs font-medium text-[var(--body-text)]">
                               <span className="text-[var(--muted-text)] mr-1.5">{idx + 1}.</span> 
                               {row.full_name}
                             </span>

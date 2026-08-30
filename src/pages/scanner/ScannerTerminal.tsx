@@ -8,11 +8,10 @@ import ESP32Settings from '../../components/scanner/ESP32Settings'
 import StateControls from '../../components/scanner/StateControls'
 import type { ScanWindow, WindowType } from '../../components/scanner/StateControls'
 import { playSuccess, playDuplicate, playError } from '../../components/scanner/AudioFeedback'
-import { Home, Bug, QrCode, CheckCircle2, XCircle, Zap } from 'lucide-react'
+import { Bug, QrCode, CheckCircle2, XCircle, Zap, Settings, Keyboard, History, Loader2, Maximize, Minimize, ArrowLeft } from 'lucide-react'
 import { sendAttendanceSms } from '../../lib/sms'
 import { useNavigate } from 'react-router-dom'
 import ManualEntry from '../../components/scanner/ManualEntry'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/Tabs'
 import ScanHistoryTab from '../../components/scanner/ScanHistoryTab'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/Dialog'
 import { Button } from '../../components/ui/Button'
@@ -84,14 +83,13 @@ export default function ScannerTerminal() {
   const [offlineQueue, setOfflineQueue] = useState<OfflineEntry[]>(loadOfflineQueue())
   const [debugMode, setDebugMode] = useState(false)
   const [debugResult, setDebugResult] = useState<DebugResult | null>(null)
-  const [currentTime, setCurrentTime] = useState(new Date())
   const [sectionSettings, setSectionSettings] = useState<SectionSettings | null>(null)
   const [isHydrating, setIsHydrating] = useState(false)
   const navigate = useNavigate()
 
   type SmsStatus = 'idle' | 'sending' | 'sent' | 'failed' | 'no_phone';
   const [smsStatus, setSmsStatus] = useState<SmsStatus>('idle');
-  const [lastSmsSentTo, setLastSmsSentTo] = useState<string | null>(null);
+
   const [sendSms, setSendSms] = useState(true);
 
   const [completedWindows, setCompletedWindows] = useState<WindowType[]>([])
@@ -101,9 +99,53 @@ export default function ScannerTerminal() {
   const [esp32Url, setEsp32Url] = useState<string | null>(null)
   const cameraStreamRef = useRef<CameraStreamHandle>(null)
 
+  // Admin Settings State
+  const [showSettingsPin, setShowSettingsPin] = useState(false)
+  const [settingsPin, setSettingsPin] = useState('')
+  const [settingsPinError, setSettingsPinError] = useState(false)
+  const [verifyingPin, setVerifyingPin] = useState(false)
+  const [showAdminDrawer, setShowAdminDrawer] = useState(false)
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [showManualModal, setShowManualModal] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flushingRef = useRef(false)
   const scannedIdsRef = useRef<Set<string>>(new Set())
+
+  // Fullscreen management
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`)
+      })
+    } else {
+      document.exitFullscreen()
+    }
+  }
+
+  const verifyAdminPin = async () => {
+    setVerifyingPin(true)
+    setSettingsPinError(false)
+    const { data } = await supabase.from('sections').select('scanner_pin').eq('id', sectionId).single()
+    if (data && data.scanner_pin === settingsPin) {
+      setShowSettingsPin(false)
+      setSettingsPin('')
+      setShowAdminDrawer(true)
+    } else {
+      setSettingsPinError(true)
+      setSettingsPin('')
+    }
+    setVerifyingPin(false)
+  }
 
   const handleWindowChange = useCallback((window: ScanWindow | null) => {
     if (!window && scanWindow) {
@@ -238,11 +280,7 @@ export default function ScannerTerminal() {
     return () => clearInterval(interval)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Clock timer
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
-    return () => clearInterval(timer)
-  }, [])
+
 
   const flushQueue = useCallback(async () => {
     if (flushingRef.current) return
@@ -403,7 +441,6 @@ export default function ScannerTerminal() {
         })
         console.log('[SMS] Result:', smsResult)
         setSmsStatus(smsResult)
-        setLastSmsSentTo(student.parent_phone)
 
         if (logData?.id) {
           const timeStr = scanTime.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -447,14 +484,6 @@ export default function ScannerTerminal() {
     setScannedIds(new Set())
   }, [students, scannedIds])
 
-  const statusStyles: Record<string, string> = {
-    PRESENT: 'text-[#c3d898] border-l-2 border-[#c3d898]',
-    LATE: 'text-[#ffd166] border-l-2 border-[#ffd166]',
-    ABSENT: 'text-[#f5c0c3] border-l-2 border-[#f5c0c3]',
-    DUPLICATE: 'text-[#ffd166] border-l-2 border-[#ffd166]',
-    ERROR: 'text-[#f5c0c3] border-l-2 border-[#f5c0c3]'
-  }
-
   if (phase === 'pin') {
     return (
       <PinScreen
@@ -468,66 +497,222 @@ export default function ScannerTerminal() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--page-bg)] text-[var(--body-text)] flex flex-col transition-colors">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 bg-[var(--card-bg)] border-b border-[var(--card-border)] shadow-sm">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/login')}
-            className="p-2 -ml-2 rounded-lg text-[var(--sidebar-muted)] hover:text-[var(--primary)] hover:bg-[var(--row-alt)] transition-colors"
-            title="Exit to Login"
-          >
-            <Home className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-[var(--page-title)] text-lg md:text-2xl font-semibold tracking-wide">Scanner Terminal</h1>
-            <p className="text-xs md:text-sm text-[var(--sidebar-muted)] mt-0.5">{sectionName || 'No Section Selected'}</p>
+    <div className="min-h-[100dvh] bg-black text-white flex flex-col relative overflow-hidden font-sans">
+      
+      {/* 1. Full-screen Camera Background */}
+      <div className="absolute inset-0 flex items-center justify-center bg-black">
+        <CameraStream 
+          ref={cameraStreamRef} 
+          onScan={processCode} 
+          active={phase === 'scanning' && !isHydrating && !showAdminDrawer && !showHistoryModal && !showManualModal} 
+          debug={debugMode} 
+          esp32Url={esp32Url} 
+        />
+      </div>
+
+      {/* 2. Top Header Overlay */}
+      <div className="relative z-10 p-4 md:p-6 flex justify-between items-start pointer-events-none">
+        <div className="flex flex-col gap-2 pointer-events-auto">
+          <div className="flex items-center gap-2">
+            {/* Back / Exit Button */}
+            <button
+              onClick={() => navigate('/login')}
+              className="p-1.5 bg-black/60 backdrop-blur-md rounded-full text-white/70 hover:text-white border border-white/10 active:scale-95 transition-all shadow-lg"
+              title="Exit Terminal"
+            >
+              <ArrowLeft className="w-5 h-5 p-0.5" />
+            </button>
+            {/* Status Badge */}
+            <div className="px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-full text-xs font-semibold text-white border border-white/10 flex items-center gap-2 shadow-lg">
+              <QrCode className="w-4 h-4 text-emerald-400" />
+              <span>{sectionName}</span>
+              <span className="text-white/40">•</span>
+              <span className="text-emerald-400">{windowType.replace('_', ' ').toUpperCase()}</span>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:block text-right mr-2">
-            <div className="text-sm font-medium text-[var(--body-text)]">{currentTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</div>
-            <div className="text-xs text-[var(--sidebar-muted)]">{currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-          </div>
+          
+          {isHydrating && (
+            <div className="px-3 py-1.5 bg-blue-500/20 backdrop-blur-md border border-blue-500/30 rounded-full text-blue-400 text-xs font-semibold flex items-center gap-2 shadow-lg animate-pulse">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Loading Scans...
+            </div>
+          )}
+
           {offlineQueue.length > 0 && (
-            <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-orange-900/40 border border-orange-600 rounded-full text-xs font-semibold text-orange-400">
-              <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+            <div className="px-3 py-1.5 bg-orange-500/20 backdrop-blur-md border border-orange-500/30 rounded-full text-orange-400 text-xs font-semibold flex items-center gap-2 shadow-lg">
+              <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
               {offlineQueue.length} Pending
             </div>
           )}
-          <button
-            onClick={() => { 
-              setPhase('pin') 
-              setSectionId('') 
-              setSectionName('') 
-              setStudents([]) 
-              handleWindowChange(null) 
-              scannedIdsRef.current.clear()
-              setScannedIds(new Set()) 
-              setCompletedWindows([]) 
-            }}
-            className="text-xs px-3 py-1.5 rounded-md border border-[var(--card-border)] text-[var(--sidebar-muted)] hover:text-[var(--body-text)] hover:bg-[var(--row-alt)] transition-colors"
+
+          {smsStatus !== 'idle' && (
+            <div className={`px-3 py-1.5 backdrop-blur-md rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg border ${
+              smsStatus === 'sending' ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' :
+              smsStatus === 'sent' ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' :
+              smsStatus === 'failed' ? 'bg-red-500/20 border-red-500/30 text-red-400' :
+              'bg-white/10 border-white/20 text-white/70'
+            }`}>
+              {smsStatus === 'sending' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 
+               smsStatus === 'sent' ? <CheckCircle2 className="w-3.5 h-3.5" /> : 
+               smsStatus === 'failed' ? <XCircle className="w-3.5 h-3.5" /> : 
+               <Zap className="w-3.5 h-3.5" />}
+              {smsStatus === 'sending' ? 'Sending SMS...' :
+               smsStatus === 'sent' ? 'SMS Sent' :
+               smsStatus === 'failed' ? 'SMS Failed' : 'No Parent Phone'}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 pointer-events-auto">
+          {/* Fullscreen Toggle */}
+          <button 
+            onClick={toggleFullscreen}
+            className="p-3 bg-black/60 backdrop-blur-md rounded-full text-white/70 hover:text-white border border-white/10 active:scale-95 transition-all shadow-xl"
+            title="Toggle Fullscreen"
           >
-            Change
+            {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+          </button>
+          
+          {/* Settings Button */}
+          <button 
+            onClick={() => setShowSettingsPin(true)}
+            className="p-3 bg-black/60 backdrop-blur-md rounded-full text-white/70 hover:text-white border border-white/10 active:scale-95 transition-all shadow-xl"
+            title="Admin Settings"
+          >
+            <Settings className="w-5 h-5" />
           </button>
         </div>
-      </header>
+      </div>
 
-      <Tabs defaultValue="scanner" className="flex-1 flex flex-col">
-        <div className="px-4 md:px-6 pt-4 pb-2 bg-[var(--page-bg)]">
-          <TabsList>
-            <TabsTrigger value="scanner">Live Scanner</TabsTrigger>
-            <TabsTrigger value="history">Scan History</TabsTrigger>
-          </TabsList>
+      {/* 3. Debug Overlay */}
+      {debugMode && debugResult && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-20 w-[90%] max-w-md pointer-events-none">
+           <div className={`p-4 backdrop-blur-xl rounded-2xl shadow-2xl border ${
+             debugResult.found ? 'bg-emerald-950/80 border-emerald-500/50' : 'bg-red-950/80 border-red-500/50'
+           }`}>
+             <div className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+               <Bug className="w-4 h-4" /> Debug: {debugResult.found ? 'Valid' : 'Invalid'}
+             </div>
+             <div className="text-xs text-white/70 font-mono break-all mb-2">{debugResult.rawPayload}</div>
+             <div className="text-xs text-white/90">Match: {debugResult.student?.full_name || 'None'}</div>
+           </div>
         </div>
+      )}
 
-        <TabsContent value="scanner" className="flex-1 flex flex-col m-0 mt-0">
-          <div className="flex-1 flex flex-col lg:grid lg:grid-cols-12 gap-6 p-4 md:p-6 pt-2 max-w-[1400px] mx-auto w-full">
+      {/* 4. Massive Feedback Overlay */}
+      <div className="flex-1 relative z-20 flex flex-col justify-end items-center pb-32 px-4 pointer-events-none">
+        {feedback && (
+          <div className={`w-full max-w-xl p-6 md:p-8 rounded-[2rem] shadow-2xl transition-all duration-300 animate-in slide-in-from-bottom-12 zoom-in-95 ${
+            feedback.status === 'PRESENT' ? 'bg-emerald-500 text-white shadow-emerald-500/20' : 
+            feedback.status === 'LATE' || feedback.status === 'DUPLICATE' ? 'bg-amber-500 text-amber-950 shadow-amber-500/20' : 
+            'bg-red-500 text-white shadow-red-500/20'
+          }`}>
+            <div className="text-4xl md:text-5xl lg:text-6xl font-black tracking-tight mb-2 drop-shadow-sm truncate">
+              {feedback.studentName}
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-2xl md:text-3xl font-bold uppercase tracking-widest opacity-90">
+                {feedback.status}
+              </div>
+              <div className="w-1.5 h-1.5 rounded-full bg-current opacity-50" />
+              <div className="text-lg md:text-xl font-medium opacity-90">
+                {feedback.message}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
-            {/* Left Column: Camera + Feedback */}
-            <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-4 min-h-[400px]">
-              {/* Window type selector */}
-              {!scanWindow && (
+      {/* 5. Bottom Navigation / Actions */}
+      <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-black via-black/80 to-transparent z-30 flex justify-center gap-4">
+        <button 
+          onClick={() => setShowManualModal(true)} 
+          className="flex-1 max-w-[200px] flex items-center justify-center gap-2 px-4 py-3 md:py-4 bg-white/10 hover:bg-white/20 active:scale-95 backdrop-blur-md border border-white/20 rounded-2xl text-white font-semibold shadow-xl transition-all"
+        >
+          <Keyboard className="w-5 h-5" />
+          <span>Manual Entry</span>
+        </button>
+        <button 
+          onClick={() => setShowHistoryModal(true)} 
+          className="flex-1 max-w-[200px] flex items-center justify-center gap-2 px-4 py-3 md:py-4 bg-white/10 hover:bg-white/20 active:scale-95 backdrop-blur-md border border-white/20 rounded-2xl text-white font-semibold shadow-xl transition-all"
+        >
+          <History className="w-5 h-5" />
+          <span>History</span>
+        </button>
+      </div>
+
+      {/* --- MODALS & DIALOGS --- */}
+
+      {/* PIN Verification for Settings */}
+      <Dialog open={showSettingsPin} onOpenChange={setShowSettingsPin}>
+        <DialogContent className="sm:max-w-md text-[var(--body-text)]">
+          <DialogHeader>
+            <DialogTitle>Admin Verification</DialogTitle>
+          </DialogHeader>
+          <div className="py-6 flex flex-col items-center">
+            <div className="text-sm text-[var(--sidebar-muted)] mb-6 text-center">
+              Enter the 4-digit PIN for {sectionName} to access terminal settings.
+            </div>
+            
+            <div className="flex gap-4 mb-6">
+              {[0, 1, 2, 3].map(i => (
+                <div
+                  key={i}
+                  className={`w-14 h-14 rounded-xl flex items-center justify-center text-3xl font-bold border-2 transition-all duration-150 ${
+                    i < settingsPin.length
+                      ? 'border-[var(--primary)] bg-[rgba(4,71,28,0.1)] text-[var(--primary)]'
+                      : 'border-[var(--input-border)] bg-[var(--input-bg)] text-transparent'
+                  }`}
+                >
+                  {i < settingsPin.length ? '●' : ''}
+                </div>
+              ))}
+            </div>
+
+            {settingsPinError && (
+              <div className="text-red-500 text-sm font-semibold mb-4 text-center animate-in fade-in">
+                Incorrect PIN. Please try again.
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-3 w-full max-w-[280px]">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map((key, idx) =>
+                key === '' ? <div key={idx} /> : key === '⌫' ? (
+                  <button key={idx} onClick={() => setSettingsPin(p => p.slice(0, -1))} className="h-14 bg-[var(--row-alt)] hover:bg-[var(--card-border)] text-[var(--body-text)] active:scale-95 rounded-xl text-xl font-bold transition-all">⌫</button>
+                ) : (
+                  <button key={idx} onClick={() => settingsPin.length < 4 && setSettingsPin(p => p + key)} className="h-14 bg-[var(--row-alt)] hover:bg-[var(--primary)] hover:text-[var(--primary-text)] text-[var(--body-text)] active:scale-95 rounded-xl text-xl font-bold transition-all">{key}</button>
+                )
+              )}
+            </div>
+
+            <Button 
+              onClick={verifyAdminPin}
+              disabled={settingsPin.length !== 4 || verifyingPin}
+              className="w-full max-w-[280px] mt-6 py-6 text-lg font-bold rounded-xl"
+            >
+              {verifyingPin ? 'Verifying...' : 'Unlock Settings'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Admin Settings Drawer/Dialog */}
+      <Dialog open={showAdminDrawer} onOpenChange={setShowAdminDrawer}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto text-[var(--body-text)]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              Terminal Settings
+              <button onClick={() => setShowAdminDrawer(false)} className="flex items-center gap-2 text-sm text-[var(--sidebar-muted)] hover:text-[var(--body-text)] hover:bg-[var(--row-alt)] px-3 py-1.5 rounded-lg transition-colors">
+                <ArrowLeft className="w-4 h-4" /> Back to Scanner
+              </button>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Window Type Selection */}
+            {!scanWindow && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-[var(--sidebar-muted)] uppercase tracking-wider">Window Type</h3>
                 <div className="flex gap-2 p-1 bg-[var(--row-alt)] rounded-lg">
                   {(['morning_in', 'afternoon_in', 'afternoon_out'] as WindowType[]).map(t => {
                     const isCompleted = completedWindows.includes(t)
@@ -536,11 +721,11 @@ export default function ScannerTerminal() {
                       <button
                         key={t}
                         onClick={() => handleWindowTabClick(t)}
-                        className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${isActive
+                        className={`flex-1 py-3 text-xs md:text-sm font-bold rounded-md transition-all ${isActive
                           ? 'bg-[var(--card-bg)] text-[var(--body-text)] shadow-sm'
                           : isCompleted
-                            ? 'text-[var(--sidebar-muted)] opacity-60 hover:opacity-100 hover:bg-[rgba(0,0,0,0.05)] dark:hover:bg-[rgba(255,255,255,0.05)]'
-                            : 'text-[var(--sidebar-muted)] hover:text-[var(--body-text)] hover:bg-[rgba(0,0,0,0.05)] dark:hover:bg-[rgba(255,255,255,0.05)]'
+                            ? 'text-[var(--sidebar-muted)] opacity-60'
+                            : 'text-[var(--sidebar-muted)] hover:text-[var(--body-text)] hover:bg-[rgba(0,0,0,0.05)]'
                           }`}
                       >
                         {t === 'morning_in' ? 'Morning IN' : t === 'afternoon_in' ? 'Afternoon IN' : 'Afternoon OUT'}
@@ -549,171 +734,12 @@ export default function ScannerTerminal() {
                     )
                   })}
                 </div>
-              )}
-
-              {/* Inline Live / Debug mode toggle (shared camera stream) */}
-              <div className="p-1 bg-[var(--row-alt)] rounded-xl flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => { setDebugMode(false); setDebugResult(null) }}
-                  className={`flex-1 py-2.5 px-3 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 ${!debugMode
-                    ? 'bg-[var(--card-bg)] text-[var(--body-text)] shadow-sm'
-                    : 'text-[var(--sidebar-muted)] hover:text-[var(--body-text)] hover:bg-[rgba(0,0,0,0.05)] dark:hover:bg-[rgba(255,255,255,0.05)]'
-                    }`}
-                >
-                  <QrCode className={`w-4 h-4 ${!debugMode ? 'text-[var(--primary)]' : ''}`} />
-                  Live Mode
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setDebugMode(true); setFeedback(null) }}
-                  className={`flex-1 py-2.5 px-3 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 ${debugMode
-                    ? 'bg-[var(--card-bg)] text-[var(--body-text)] shadow-sm ring-1 ring-amber-500/40'
-                    : 'text-[var(--sidebar-muted)] hover:text-[var(--body-text)] hover:bg-[rgba(0,0,0,0.05)] dark:hover:bg-[rgba(255,255,255,0.05)]'
-                    }`}
-                >
-                  <Bug className={`w-4 h-4 ${debugMode ? 'text-amber-500' : ''}`} />
-                  Debug Mode
-                </button>
               </div>
+            )}
 
-              {isHydrating && (
-                <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded-xl text-blue-400 text-sm font-semibold flex items-center justify-center gap-2 shadow-sm animate-pulse">
-                  <i className="ti ti-loader-2 animate-spin text-lg" />
-                  Loading Previous Scans...
-                </div>
-              )}
-
-              {/* ESP32-CAM Connection Settings */}
-              <ESP32Settings onConnectionChange={setEsp32Url} />
-
-              <CameraStream ref={cameraStreamRef} onScan={processCode} active={phase === 'scanning' && !isHydrating} debug={debugMode} esp32Url={esp32Url} />
-
-              {/* Inline Debug Feedback Overlay */}
-              {debugMode && debugResult && (
-                <div className={`p-4 border rounded-xl shadow-sm transition-all duration-300 ${debugResult.found
-                  ? 'border-[rgba(195,216,152,0.4)] bg-[rgba(195,216,152,0.08)]'
-                  : 'border-[rgba(112,22,30,0.4)] bg-[rgba(112,22,30,0.12)]'
-                  }`}>
-                  <div className="flex items-start gap-3">
-                    {debugResult.found ? (
-                      <CheckCircle2 className="w-6 h-6 text-[#c3d898] shrink-0 mt-0.5" />
-                    ) : (
-                      <XCircle className="w-6 h-6 text-[#f5c0c3] shrink-0 mt-0.5" />
-                    )}
-                    <div className="flex-1 space-y-2">
-                      <div className={`font-semibold text-sm ${debugResult.found ? 'text-[#c3d898]' : 'text-[#f5c0c3]'}`}>
-                        {debugResult.found ? 'Valid Student Match Found' : 'No Student Match in Section'}
-                      </div>
-
-                      {/* Raw String */}
-                      <div className="text-xs text-[var(--body-text)]">
-                        <span className="text-[var(--sidebar-muted)] font-semibold">Raw Payload: </span>
-                        <span className="break-all font-mono">{debugResult.rawPayload}</span>
-                      </div>
-
-                      {/* Student Name Match */}
-                      <div className="text-xs text-[var(--body-text)]">
-                        <span className="text-[var(--sidebar-muted)] font-semibold">Student Name Match: </span>
-                        <span className={debugResult.found ? 'text-[#c3d898] font-semibold' : 'text-[#f5c0c3] font-semibold'}>
-                          {debugResult.found ? `✓ ${debugResult.student?.full_name}` : '✗ None'}
-                        </span>
-                      </div>
-
-                      {/* Validation Status */}
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="text-[var(--sidebar-muted)] font-semibold">Validation Status: </span>
-                        <span className={`px-2 py-0.5 rounded-full font-bold uppercase tracking-wide ${debugResult.found
-                          ? 'bg-[#c3d898]/20 text-[#c3d898] border border-[#c3d898]/40'
-                          : 'bg-[#f5c0c3]/20 text-[#f5c0c3] border border-[#f5c0c3]/40'
-                          }`}>
-                          {debugResult.found ? 'Valid' : 'Invalid'}
-                        </span>
-                        <span className="text-[var(--sidebar-muted)] ml-1">— no database write (debug only)</span>
-                      </div>
-
-                      {debugResult.student && (
-                        <div className="text-xs text-[var(--body-text)]">
-                          <span className="text-[var(--sidebar-muted)] font-semibold">LRN: </span>
-                          {debugResult.student.lrn}
-                        </div>
-                      )}
-                    </div>
-                    <Zap className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                  </div>
-                </div>
-              )}
-
-              {/* Feedback Card */}
-              {feedback && (
-                <div className={`p-4 border border-[var(--card-border)] bg-[var(--card-bg)] rounded-xl shadow-sm transition-all duration-300 ${statusStyles[feedback.status]}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-lg font-medium text-[var(--body-text)]">{feedback.studentName}</div>
-                      <div className="text-sm text-[var(--sidebar-muted)]">LRN: {feedback.lrn}</div>
-                      <div className="text-sm mt-1 text-[var(--body-text)] opacity-90">{feedback.message}</div>
-                    </div>
-                    <div className={`text-2xl font-extrabold tracking-widest`}>
-                      {feedback.status}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* SMS Status Indicator */}
-              {smsStatus !== 'idle' && (
-                <div style={{
-                  marginTop: 10,
-                  padding: '10px 14px',
-                  borderRadius: 8,
-                  border: '1px solid',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 13,
-                  ...(smsStatus === 'sending' && {
-                    background: 'rgba(195,216,152,0.08)',
-                    borderColor: 'rgba(195,216,152,0.25)',
-                    color: '#9fc98a',
-                  }),
-                  ...(smsStatus === 'sent' && {
-                    background: 'rgba(195,216,152,0.12)',
-                    borderColor: 'rgba(195,216,152,0.4)',
-                    color: '#c3d898',
-                  }),
-                  ...(smsStatus === 'failed' && {
-                    background: 'rgba(112,22,30,0.15)',
-                    borderColor: 'rgba(112,22,30,0.4)',
-                    color: '#f5c0c3',
-                  }),
-                  ...(smsStatus === 'no_phone' && {
-                    background: 'rgba(195,216,152,0.05)',
-                    borderColor: 'rgba(195,216,152,0.15)',
-                    color: '#6b9e5e',
-                  }),
-                }}>
-                  <i
-                    className={
-                      smsStatus === 'sending' ? 'ti ti-loader-2 animate-spin' :
-                        smsStatus === 'sent' ? 'ti ti-check' :
-                          smsStatus === 'failed' ? 'ti ti-alert-triangle' :
-                            'ti ti-phone-off'
-                    }
-                    style={{ fontSize: 16 }}
-                    aria-hidden
-                  />
-                  <span>
-                    {smsStatus === 'sending' && 'Sending SMS to parent...'}
-                    {smsStatus === 'sent' && `SMS sent to parent (${lastSmsSentTo})`}
-                    {smsStatus === 'failed' && 'SMS failed — check API key or phone connection'}
-                    {smsStatus === 'no_phone' && 'No parent phone number on record for this student'}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Right Column: Controls + Stats + Manual Entry */}
-            <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-4 h-full">
+            {/* State Controls (Start/End) */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-[var(--sidebar-muted)] uppercase tracking-wider">Session Control</h3>
               <StateControls
                 sectionId={sectionId}
                 scanWindow={scanWindow}
@@ -721,81 +747,88 @@ export default function ScannerTerminal() {
                 onWindowChange={handleWindowChange}
                 onBatchAbsent={handleBatchAbsent}
               />
+            </div>
 
-              {/* Scan stats */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl text-center shadow-sm">
-                  <div className="text-2xl font-bold text-[var(--primary)]">{scannedIds.size}</div>
-                  <div className="text-xs text-[var(--sidebar-muted)] mt-1">Scanned</div>
+            <hr className="border-[var(--card-border)]" />
+
+            {/* ESP32 Settings */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-[var(--sidebar-muted)] uppercase tracking-wider">Hardware Camera</h3>
+              <ESP32Settings onConnectionChange={setEsp32Url} />
+            </div>
+
+            <hr className="border-[var(--card-border)]" />
+
+            {/* Feature Toggles */}
+            <div className="grid sm:grid-cols-2 gap-4">
+              {/* SMS Toggle */}
+              <div className="p-4 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl shadow-sm flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold text-[var(--body-text)]">SMS Alerts</div>
+                  <div className="text-xs text-[var(--sidebar-muted)] mt-0.5">{sendSms ? 'Enabled' : 'Disabled'}</div>
                 </div>
-                <div className="p-3 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl text-center shadow-sm">
-                  <div className="text-2xl font-bold text-[var(--primary)]">{students.length - scannedIds.size}</div>
-                  <div className="text-xs text-[var(--sidebar-muted)] mt-1">Remaining</div>
-                </div>
-                <div className="p-3 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl text-center shadow-sm">
-                  <div className="text-2xl font-bold text-[var(--primary)]">{students.length}</div>
-                  <div className="text-xs text-[var(--sidebar-muted)] mt-1">Total</div>
-                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={sendSms}
+                  onClick={() => setSendSms(v => !v)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${sendSms ? 'bg-[var(--primary)]' : 'bg-[var(--row-alt)] border border-[var(--card-border)]'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${sendSms ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
               </div>
 
-              {/* SMS Notifications Toggle */}
-              <div className="p-4 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-[var(--body-text)]">SMS Notifications</div>
-                    <div className="text-xs text-[var(--sidebar-muted)] mt-0.5">
-                      {sendSms ? 'Parent SMS will be sent on each scan' : 'No SMS will be sent on scans'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={sendSms}
-                    onClick={() => setSendSms(v => !v)}
-                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${sendSms ? 'bg-[var(--primary)]' : 'bg-[var(--row-alt)] border border-[var(--card-border)]'}`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${sendSms ? 'translate-x-6' : 'translate-x-1'}`}
-                    />
-                  </button>
+              {/* Debug Toggle */}
+              <div className="p-4 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl shadow-sm flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold text-[var(--body-text)]">Debug Mode</div>
+                  <div className="text-xs text-[var(--sidebar-muted)] mt-0.5">{debugMode ? 'No DB Writes' : 'Production'}</div>
                 </div>
-              </div>
-
-              {/* Manual Entry */}
-              <div className="p-4 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl shadow-sm space-y-3">
-                <label className="block text-xs uppercase tracking-widest text-[var(--sidebar-muted)] font-semibold">
-                  Manual Entry
-                </label>
-                <ManualEntry students={students} onSubmit={processCode} />
-              </div>
-
-              {/* Student roster preview */}
-              <div className="p-4 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl shadow-sm flex-1 flex flex-col min-h-[250px] lg:min-h-[150px]">
-                <div className="text-xs uppercase tracking-widest text-[var(--sidebar-muted)] font-semibold mb-3">
-                  Section Roster ({students.length})
-                </div>
-                <div className="space-y-1 overflow-y-auto pr-1 flex-1">
-                  {students.map(s => (
-                    <div key={s.id} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-[var(--row-alt)] transition-colors">
-                      <div className="text-sm truncate text-[var(--body-text)]">{s.full_name}</div>
-                      <div className={`text-xs px-2 py-0.5 rounded-full font-semibold ${scannedIds.has(s.id) ? 'bg-[#c3d898] text-[#04471c]' : 'bg-[var(--row-alt)] text-[var(--sidebar-muted)]'
-                        }`}>
-                        {scannedIds.has(s.id) ? '✓' : '—'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={debugMode}
+                  onClick={() => { setDebugMode(v => !v); setDebugResult(null); setFeedback(null); }}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${debugMode ? 'bg-amber-500' : 'bg-[var(--row-alt)] border border-[var(--card-border)]'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${debugMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
               </div>
             </div>
+
           </div>
-        </TabsContent>
-        <TabsContent value="history" className="flex-1 p-4 md:p-6 pt-2 max-w-[1400px] mx-auto w-full m-0 mt-0">
-          <ScanHistoryTab sectionId={sectionId} />
-        </TabsContent>
-      </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Entry Sheet */}
+      <Dialog open={showManualModal} onOpenChange={setShowManualModal}>
+        <DialogContent className="sm:max-w-md text-[var(--body-text)]">
+          <DialogHeader>
+            <DialogTitle>Manual LRN Entry</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <ManualEntry students={students} onSubmit={(lrn) => {
+              processCode(lrn)
+              setShowManualModal(false)
+            }} />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Scan History Sheet */}
+      <Dialog open={showHistoryModal} onOpenChange={setShowHistoryModal}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto text-[var(--body-text)]">
+          <DialogHeader>
+            <DialogTitle>Recent Scans</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <ScanHistoryTab sectionId={sectionId} />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!confirmReopenType} onOpenChange={(open) => !open && setConfirmReopenType(null)}>
-        <DialogContent>
+        <DialogContent className="text-[var(--body-text)]">
           <DialogHeader>
             <DialogTitle>Re-open Completed Window?</DialogTitle>
           </DialogHeader>

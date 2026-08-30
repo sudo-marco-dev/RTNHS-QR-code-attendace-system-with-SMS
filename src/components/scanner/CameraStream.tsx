@@ -99,9 +99,15 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
       if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
         return null
       }
-      // Compress: 320x240, quality 0.5
-      const targetWidth = 320
-      const targetHeight = 240
+      // Calculate dimensions maintaining aspect ratio (max dimension 320px to keep size small)
+      const ratio = video.videoWidth / video.videoHeight
+      let targetWidth = 320
+      let targetHeight = 320 / ratio
+      if (targetHeight > 320) {
+        targetHeight = 320
+        targetWidth = 320 * ratio
+      }
+      
       canvas.width = targetWidth
       canvas.height = targetHeight
       const ctx = canvas.getContext('2d')

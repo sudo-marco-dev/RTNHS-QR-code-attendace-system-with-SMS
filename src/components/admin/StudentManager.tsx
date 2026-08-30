@@ -191,14 +191,14 @@ export default function StudentManager() {
         <h2 style={{ fontSize: 15, fontWeight: 500, color: 'var(--page-title)' }}>Student Roster Management</h2>
       </div>
 
-      <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--card-border)', borderRadius: 10, padding: '20px' }}>
-        <div style={{ marginBottom: 20, display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end', justifyContent: 'space-between' }}>
-          <div>
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-4 md:p-5">
+        <div className="mb-5 flex flex-col sm:flex-row gap-4 sm:items-end justify-between">
+          <div className="w-full sm:w-auto">
             <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--body-text)', marginBottom: 6 }}>
               Select Section to View/Manage
             </label>
-            <div className="flex items-center gap-4">
-              <Select value={selectedSectionId} onChange={(e) => setSelectedSectionId(e.target.value)} className="min-w-[200px]">
+            <div className="flex flex-wrap items-center gap-3 w-full">
+              <Select value={selectedSectionId} onChange={(e) => setSelectedSectionId(e.target.value)} className="w-full sm:w-auto min-w-[200px]">
                 <option value="" disabled>Select a section...</option>
                 {sections.map(s => (
                   <option key={s.id} value={s.id}>{s.grade_level} - {s.name}</option>
@@ -207,7 +207,8 @@ export default function StudentManager() {
               {selectedStudentIds.size > 0 && (
                 <Button 
                   onClick={() => setIsBulkDeleteOpen(true)} 
-                  style={{ background: 'var(--danger)', color: 'white', border: 'none', whiteSpace: 'nowrap' }}
+                  style={{ background: 'var(--danger)', color: 'white', border: 'none' }}
+                  className="w-full sm:w-auto text-xs py-2 px-3 whitespace-nowrap"
                 >
                   Delete Selected ({selectedStudentIds.size})
                 </Button>
@@ -234,7 +235,7 @@ export default function StudentManager() {
         </div>
 
         {selectedSectionId && (
-          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl mt-6 overflow-hidden">
+          <div className="border-t border-[var(--card-border)] -mx-4 md:-mx-5 mt-5 pt-2 overflow-hidden">
             {/* Desktop Header */}
             <div className="hidden md:grid grid-cols-[40px_2fr_2fr_2fr_1fr] px-4 py-3 bg-[var(--table-header-bg)] border-b border-[var(--card-border)]">
               {['', 'Full Name', 'LRN', 'Parent Phone', 'Actions'].map((c, idx) => (
@@ -253,8 +254,8 @@ export default function StudentManager() {
                   return (
                     <div key={student.id} 
                       onClick={() => toggleStudentSelection(student.id)}
-                      className={`flex flex-col md:grid md:grid-cols-[40px_2fr_2fr_2fr_1fr] md:items-center px-4 py-3 border-b border-[var(--card-border)] cursor-pointer transition-colors ${
-                        isSelected ? 'bg-[var(--row-hover)]' : (idx % 2 === 1 ? 'bg-[var(--row-alt)]' : 'bg-transparent')
+                      className={`flex flex-col md:grid md:grid-cols-[40px_2fr_2fr_2fr_1fr] md:items-center px-4 py-3 border-b border-[var(--card-border)] cursor-pointer transition-colors hover:bg-[var(--row-hover)] ${
+                        isSelected ? 'bg-[var(--row-hover)]' : 'bg-transparent'
                       }`}
                     >
                       <div className="flex items-start md:contents w-full">
@@ -271,7 +272,7 @@ export default function StudentManager() {
                         {/* Content Stack on Mobile / Grid on Desktop */}
                         <div className="ml-3 md:ml-0 flex flex-col md:contents flex-1 min-w-0">
                           {/* Primary Info */}
-                          <span className="text-[14px] md:text-xs font-medium text-[var(--body-text)] truncate">
+                          <span className="text-[14px] md:text-xs font-medium text-[var(--body-text)]">
                             <span className="text-[var(--muted-text)] mr-1.5">{idx + 1}.</span> 
                             {student.full_name}
                           </span>

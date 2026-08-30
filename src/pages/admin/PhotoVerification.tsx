@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabase'
-import { Camera, CameraOff, Search, ChevronLeft, ChevronRight, X, Filter } from 'lucide-react'
+import { Camera, CameraOff, Search, ChevronLeft, ChevronRight, X, Filter, RefreshCw } from 'lucide-react'
 
 const supabaseServiceRole = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -41,6 +41,7 @@ export default function PhotoVerification() {
   const [search, setSearch] = useState('')
   const [enlargedPhoto, setEnlargedPhoto] = useState<string | null>(null)
   const [page, setPage] = useState(0)
+  const [autoRefresh, setAutoRefresh] = useState(false)
   const PAGE_SIZE = 20
 
   // Fetch sections
@@ -53,13 +54,15 @@ export default function PhotoVerification() {
   }, [])
 
   // Fetch attendance logs with photos
-  const fetchLogs = useCallback(async () => {
+  const fetchLogs = useCallback(async (silent = false) => {
     if (!selectedSection) {
       setLogs([])
       return
     }
-    setLoading(true)
-    setPage(0)
+    if (!silent) {
+      setLoading(true)
+      setPage(0)
+    }
 
     // Get scan windows for this section on the selected date
     const startOfDay = `${selectedDate}T00:00:00.000Z`
@@ -91,16 +94,27 @@ export default function PhotoVerification() {
 
     if (error) {
       console.error('[PHOTO VERIFY] Error fetching logs:', error)
-      setLogs([])
+      if (!silent) setLogs([])
     } else {
       setLogs((data as unknown as AttendanceLog[]) || [])
     }
-    setLoading(false)
+    if (!silent) setLoading(false)
   }, [selectedSection, selectedDate, selectedWindow])
 
   useEffect(() => {
     fetchLogs()
   }, [fetchLogs])
+
+  // Auto-refresh polling
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>
+    if (autoRefresh && selectedSection) {
+      interval = setInterval(() => {
+        fetchLogs(true) // Silent refresh
+      }, 3000) // Poll every 3 seconds
+    }
+    return () => clearInterval(interval)
+  }, [autoRefresh, selectedSection, fetchLogs])
 
   // Filter by search
   const filteredLogs = logs.filter(log => {
@@ -174,23 +188,47 @@ export default function PhotoVerification() {
         </div>
       </div>
 
-      {/* Stats bar */}
+      {/* Stats & Controls bar */}
       {selectedSection && !loading && (
-        <div className="flex flex-wrap gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--row-alt)] rounded-lg text-xs font-semibold">
-            <Filter className="w-3.5 h-3.5 text-[var(--sidebar-muted)]" />
-            <span className="text-[var(--body-text)]">{filteredLogs.length} scans</span>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs font-semibold text-emerald-400">
-            <Camera className="w-3.5 h-3.5" />
-            {withPhoto} with photo
-          </div>
-          {withoutPhoto > 0 && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs font-semibold text-amber-400">
-              <CameraOff className="w-3.5 h-3.5" />
-              {withoutPhoto} no photo
+        <div className="flex flex-wrap gap-4 items-center justify-between">
+          <div className="flex flex-wrap gap-3">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--row-alt)] rounded-lg text-xs font-semibold">
+              <Filter className="w-3.5 h-3.5 text-[var(--sidebar-muted)]" />
+              <span className="text-[var(--body-text)]">{filteredLogs.length} scans</span>
             </div>
-          )}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs font-semibold text-emerald-400">
+              <Camera className="w-3.5 h-3.5" />
+              {withPhoto} with photo
+            </div>
+            {withoutPhoto > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs font-semibold text-amber-400">
+                <CameraOff className="w-3.5 h-3.5" />
+                {withoutPhoto} no photo
+              </div>
+            )}
+          </div>
+
+          {/* Refresh Controls */}
+          <div className="flex items-center gap-4 border border-[var(--card-border)] bg-[var(--row-alt)] rounded-lg p-1.5">
+            <label className="flex items-center gap-2 cursor-pointer pl-2">
+              <input 
+                type="checkbox" 
+                checked={autoRefresh} 
+                onChange={e => setAutoRefresh(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-[var(--card-border)] text-[var(--primary)] focus:ring-[var(--primary)] bg-black/20"
+              />
+              <span className="text-xs font-semibold text-[var(--body-text)]">Auto-Refresh</span>
+            </label>
+            <div className="w-px h-4 bg-[var(--card-border)]" />
+            <button
+              onClick={() => fetchLogs()}
+              disabled={autoRefresh}
+              className="p-1.5 rounded hover:bg-black/10 text-[var(--sidebar-muted)] hover:text-[var(--body-text)] transition-colors disabled:opacity-50 disabled:hover:bg-transparent"
+              title="Manual Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${autoRefresh ? 'animate-spin opacity-50' : ''}`} />
+            </button>
+          </div>
         </div>
       )}
 
