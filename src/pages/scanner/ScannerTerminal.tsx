@@ -8,7 +8,7 @@ import ESP32Settings from '../../components/scanner/ESP32Settings'
 import StateControls from '../../components/scanner/StateControls'
 import type { ScanWindow, WindowType } from '../../components/scanner/StateControls'
 import { playSuccess, playDuplicate, playError } from '../../components/scanner/AudioFeedback'
-import { Bug, QrCode, CheckCircle2, XCircle, Zap, Settings, Keyboard, History, Loader2, Maximize, Minimize, ArrowLeft } from 'lucide-react'
+import { Bug, QrCode, CheckCircle2, XCircle, Zap, Settings, Keyboard, History, Loader2, Maximize, Minimize, ArrowLeft, ShieldAlert, Lock, LockOpen } from 'lucide-react'
 import { sendAttendanceSms } from '../../lib/sms'
 import { useNavigate } from 'react-router-dom'
 import ManualEntry from '../../components/scanner/ManualEntry'
@@ -40,8 +40,8 @@ interface OfflineEntry {
 interface FeedbackCard {
   studentName: string
   lrn: string
-  status: 'PRESENT' | 'LATE' | 'ABSENT' | 'DUPLICATE' | 'ERROR'
-  message: string
+  status: 'PRESENT' | 'LATE' | 'DUPLICATE' | 'ERROR'
+  message?: string
 }
 
 interface DebugResult {
@@ -59,44 +59,50 @@ interface SectionSettings {
   afternoon_out_end: string
 }
 
-const OFFLINE_KEY = 'rtnhs_offline_queue'
+const STORAGE_KEY = 'rtnhs_offline_queue'
 
 function loadOfflineQueue(): OfflineEntry[] {
   try {
-    return JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]')
-  } catch { return [] }
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
 }
 
-function saveOfflineQueue(q: OfflineEntry[]) {
-  localStorage.setItem(OFFLINE_KEY, JSON.stringify(q))
+function saveOfflineQueue(queue: OfflineEntry[]): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(queue))
 }
 
 export default function ScannerTerminal() {
   const [phase, setPhase] = useState<'pin' | 'scanning'>('pin')
   const [sectionId, setSectionId] = useState('')
   const [sectionName, setSectionName] = useState('')
+  const navigate = useNavigate()
   const [students, setStudents] = useState<Student[]>([])
   const [scanWindow, setScanWindow] = useState<ScanWindow | null>(null)
   const [windowType, setWindowType] = useState<WindowType>('morning_in')
   const [scannedIds, setScannedIds] = useState<Set<string>>(new Set())
   const [feedback, setFeedback] = useState<FeedbackCard | null>(null)
-  const [offlineQueue, setOfflineQueue] = useState<OfflineEntry[]>(loadOfflineQueue())
   const [debugMode, setDebugMode] = useState(false)
   const [debugResult, setDebugResult] = useState<DebugResult | null>(null)
-  const [sectionSettings, setSectionSettings] = useState<SectionSettings | null>(null)
   const [isHydrating, setIsHydrating] = useState(false)
-  const navigate = useNavigate()
+  const [offlineQueue, setOfflineQueue] = useState<OfflineEntry[]>(() => loadOfflineQueue())
 
   type SmsStatus = 'idle' | 'sending' | 'sent' | 'failed' | 'no_phone';
   const [smsStatus, setSmsStatus] = useState<SmsStatus>('idle');
 
+  // Local switch & Global Admin SMS switch
   const [sendSms, setSendSms] = useState(true);
+  const [globalSmsEnabled, setGlobalSmsEnabled] = useState<boolean>(true);
 
   const [completedWindows, setCompletedWindows] = useState<WindowType[]>([])
   const [confirmReopenType, setConfirmReopenType] = useState<WindowType | null>(null)
 
-  // ESP32-CAM state
-  const [esp32Url, setEsp32Url] = useState<string | null>(null)
+  // ESP32-CAM state — persist across refreshes
+  const [esp32Url, setEsp32Url] = useState<string | null>(() => {
+    return localStorage.getItem('rtnhs_esp32_url') || 'http://rtnhs-scanner.local'
+  })
   const cameraStreamRef = useRef<CameraStreamHandle>(null)
 
   // Admin Settings State
@@ -104,14 +110,83 @@ export default function ScannerTerminal() {
   const [settingsPin, setSettingsPin] = useState('')
   const [settingsPinError, setSettingsPinError] = useState(false)
   const [verifyingPin, setVerifyingPin] = useState(false)
+  const [isSettingsUnlocked, setIsSettingsUnlocked] = useState(false)
+  const [requirePinForSettings, setRequirePinForSettings] = useState(() => {
+    return localStorage.getItem('rtnhs_require_settings_pin') !== 'false'
+  })
   const [showAdminDrawer, setShowAdminDrawer] = useState(false)
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [showManualModal, setShowManualModal] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [sectionSettings, setSectionSettings] = useState<SectionSettings | null>(null)
 
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debugTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flushingRef = useRef(false)
   const scannedIdsRef = useRef<Set<string>>(new Set())
+
+  // Web-to-ESP32 OLED Integration helper (non-blocking fast GET with fallback)
+  const notifyEspScreen = useCallback((status: string, name: string = '', id: string = '', code: string = '', msg: string = '') => {
+    if (!esp32Url) return
+    try {
+      const baseUrl = esp32Url.replace(/\/+$/, '')
+      const params = new URLSearchParams({ status, name, id, code, msg }).toString()
+
+      // Primary: Fast GET query request (Zero CORS preflight OPTIONS, finishes in ~1ms)
+      fetch(`${baseUrl}/scan-result?${params}`, {
+        method: 'GET',
+        mode: 'no-cors'
+      }).catch(() => {
+        // Fallback: simple form POST
+        fetch(`${baseUrl}/scan-result`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params,
+          mode: 'no-cors'
+        }).catch(err => console.warn('[ESP32-OLED] Failed to notify screen:', err))
+      })
+    } catch (err) {
+      console.warn('[ESP32-OLED] Notification error:', err)
+    }
+  }, [esp32Url])
+
+  // Hydrate global SMS configuration from Supabase system_settings
+  useEffect(() => {
+    const fetchSmsSetting = async () => {
+      try {
+        const { data } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'sms_enabled')
+          .maybeSingle()
+
+        if (data) {
+          setGlobalSmsEnabled(data.value === true || data.value === 'true')
+        }
+      } catch (err) {
+        console.warn('[SCANNER] Failed to load sms_enabled setting:', err)
+      }
+    }
+    fetchSmsSetting()
+
+    // Realtime listener for immediate sync when Admin toggles SMS
+    const channel = supabase
+      .channel('system_settings_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'system_settings', filter: 'key=eq.sms_enabled' },
+        (payload: any) => {
+          if (payload.new && 'value' in payload.new) {
+            setGlobalSmsEnabled(payload.new.value === true || payload.new.value === 'true')
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
   // Fullscreen management
   useEffect(() => {
@@ -132,6 +207,19 @@ export default function ScannerTerminal() {
     }
   }
 
+  const handleToggleRequirePin = (val: boolean) => {
+    setRequirePinForSettings(val)
+    localStorage.setItem('rtnhs_require_settings_pin', String(val))
+  }
+
+  const handleOpenSettings = () => {
+    if (!requirePinForSettings || isSettingsUnlocked) {
+      setShowAdminDrawer(true)
+    } else {
+      setShowSettingsPin(true)
+    }
+  }
+
   const verifyAdminPin = async () => {
     setVerifyingPin(true)
     setSettingsPinError(false)
@@ -139,6 +227,7 @@ export default function ScannerTerminal() {
     if (data && data.scanner_pin === settingsPin) {
       setShowSettingsPin(false)
       setSettingsPin('')
+      setIsSettingsUnlocked(true)
       setShowAdminDrawer(true)
     } else {
       setSettingsPinError(true)
@@ -305,7 +394,7 @@ export default function ScannerTerminal() {
     feedbackTimer.current = setTimeout(() => setFeedback(null), 3000)
   }
 
-  // Debug mode: validate locally, show on-screen result, BYPASS database entirely.
+  // Debug mode: validate locally, show on-screen result, auto-dismiss, and notify ESP32 OLED
   const processDebugCode = useCallback((code: string) => {
     const student = students.find(s => s.qr_code === code || s.lrn === code)
     setDebugResult({
@@ -313,12 +402,18 @@ export default function ScannerTerminal() {
       found: !!student,
       student: student || null
     })
+
+    if (debugTimer.current) clearTimeout(debugTimer.current)
+    debugTimer.current = setTimeout(() => setDebugResult(null), 3500)
+
     if (student) {
       playSuccess()
+      notifyEspScreen('scanned', student.full_name, student.lrn, 'DBG')
     } else {
       playError()
+      notifyEspScreen('error', 'Unknown QR', code, 'ERR', 'Not in Section')
     }
-  }, [students])
+  }, [students, notifyEspScreen])
 
   const processCode = useCallback(async (code: string) => {
     // Prevent any scanning if we are still fetching the previous state from Supabase
@@ -337,18 +432,21 @@ export default function ScannerTerminal() {
     if (!student) {
       playError()
       showFeedback({ studentName: 'Unknown', lrn: code, status: 'ERROR', message: 'Student not found in this section' })
+      notifyEspScreen('error', 'Unknown QR', code, 'ERR', 'Not in Section')
       return
     }
 
     if (!scanWindow || scanWindow.status === 'closed') {
       playError()
       showFeedback({ studentName: student.full_name, lrn: student.lrn, status: 'ERROR', message: 'No active scan window. Please open a window first.' })
+      notifyEspScreen('error', student.full_name, student.lrn, 'ERR', 'Window Closed')
       return
     }
 
     if (scannedIdsRef.current.has(student.id)) {
       playDuplicate()
       showFeedback({ studentName: student.full_name, lrn: student.lrn, status: 'DUPLICATE', message: 'Already scanned in this window' })
+      notifyEspScreen('duplicate', student.full_name, student.lrn, 'DUP')
       return
     }
 
@@ -378,22 +476,25 @@ export default function ScannerTerminal() {
       error = insertError
     }
 
+    // 1. Instant User and ESP32-CAM Screen Feedback (Zero delay for student/hardware)
+    playSuccess()
+    showFeedback({ studentName: student.full_name, lrn: student.lrn, status, message: status === 'PRESENT' ? 'Attendance recorded' : 'Marked as Late' })
+    notifyEspScreen('scanned', student.full_name, student.lrn, status === 'PRESENT' ? 'OK' : 'LATE')
+
     if (error) {
       // Queue offline
       const newQueue = [...loadOfflineQueue(), { ...entry, offline_sync: true }]
       saveOfflineQueue(newQueue)
       setOfflineQueue(newQueue)
     } else {
-      // Capture & upload face verification photo (fire-and-forget)
+      // Background face verification photo capture & upload (fire-and-forget)
       if (logData?.id && cameraStreamRef.current) {
         const photoData = cameraStreamRef.current.captureFacePhoto()
         if (photoData) {
-          // Upload async — don't block scan feedback
           const uploadPhoto = async () => {
             try {
               const dateStr = scanTime.toISOString().split('T')[0]
               const fileName = `${sectionId}/${dateStr}/${student.id}_${windowType}_${Date.now()}.jpg`
-              // Convert base64 to blob
               const base64 = photoData.split(',')[1]
               const byteString = atob(base64)
               const ab = new ArrayBuffer(byteString.length)
@@ -423,43 +524,48 @@ export default function ScannerTerminal() {
               console.error('[PHOTO] Error:', photoErr)
             }
           }
-          uploadPhoto() // fire-and-forget
+          uploadPhoto()
         }
       }
 
-      if (sendSms) {
-        console.log('[SMS] Scan success, student:', student.full_name, 'parent_phone:', student.parent_phone)
-        // Send SMS
-        setSmsStatus('sending')
-        console.log('[SMS] Calling sendAttendanceSms...')
-        const smsResult = await sendAttendanceSms({
-          studentName: student.full_name,
-          section: sectionName,
-          scanType: windowType.includes('out') ? 'TIME OUT' : 'TIME IN',
-          scannedAt: scanTime,
-          parentPhone: student.parent_phone
-        })
-        console.log('[SMS] Result:', smsResult)
-        setSmsStatus(smsResult)
+      // Background SMS dispatch — checks both global admin setting and local switch
+      if (!globalSmsEnabled) {
+        console.log('[SMS] Blocked by global admin system settings (Testing/Debug mode). Skipping SMS dispatch.')
+      } else if (sendSms) {
+        (async () => {
+          try {
+            console.log('[SMS] Scan success, sending SMS for student:', student.full_name, 'phone:', student.parent_phone)
+            setSmsStatus('sending')
+            const smsResult = await sendAttendanceSms({
+              studentName: student.full_name,
+              section: sectionName,
+              scanType: windowType.includes('out') ? 'TIME OUT' : 'TIME IN',
+              scannedAt: scanTime,
+              parentPhone: student.parent_phone
+            })
+            console.log('[SMS] Result:', smsResult)
+            setSmsStatus(smsResult)
 
-        if (logData?.id) {
-          const timeStr = scanTime.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
-          const dateStr = scanTime.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-          await supabase.from('sms_logs').insert({
-            attendance_log_id: logData.id,
-            student_id: student.id,
-            parent_phone: student.parent_phone,
-            message_content: `[RTNHS Attendance] ${student.full_name} has ${windowType.includes('out') ? 'TIME OUT' : 'TIME IN'} at ${timeStr}. Date: ${dateStr} | ${sectionName}`,
-            status: smsResult
-          });
-        }
-        setTimeout(() => setSmsStatus('idle'), 5000)
+            if (logData?.id) {
+              const timeStr = scanTime.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
+              const dateStr = scanTime.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+              await supabase.from('sms_logs').insert({
+                attendance_log_id: logData.id,
+                student_id: student.id,
+                parent_phone: student.parent_phone,
+                message_content: `[RTNHS Attendance] ${student.full_name} has ${windowType.includes('out') ? 'TIME OUT' : 'TIME IN'} at ${timeStr}. Date: ${dateStr} | ${sectionName}`,
+                status: smsResult
+              });
+            }
+            setTimeout(() => setSmsStatus('idle'), 5000)
+          } catch (smsErr) {
+            console.error('[SMS] Send error:', smsErr)
+            setSmsStatus('failed')
+          }
+        })()
       }
     }
-
-    playSuccess()
-    showFeedback({ studentName: student.full_name, lrn: student.lrn, status, message: status === 'PRESENT' ? 'Attendance recorded' : 'Marked as Late' })
-  }, [students, scanWindow, debugMode, processDebugCode, sendSms, isHydrating])
+  }, [students, scanWindow, debugMode, processDebugCode, sendSms, globalSmsEnabled, isHydrating, notifyEspScreen, sectionId, sectionName, windowType])
 
   const handleBatchAbsent = useCallback(async (windowId: string) => {
     const unscanned = students.filter(s => !scannedIds.has(s.id))
@@ -531,6 +637,14 @@ export default function ScannerTerminal() {
             </div>
           </div>
           
+          {/* SMS Blocked Global Alert */}
+          {!globalSmsEnabled && (
+            <div className="px-3 py-1.5 bg-amber-500/20 backdrop-blur-md border border-amber-500/40 rounded-full text-amber-300 text-xs font-semibold flex items-center gap-2 shadow-lg">
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>SMS Blocked (Admin Testing Mode)</span>
+            </div>
+          )}
+
           {isHydrating && (
             <div className="px-3 py-1.5 bg-blue-500/20 backdrop-blur-md border border-blue-500/30 rounded-full text-blue-400 text-xs font-semibold flex items-center gap-2 shadow-lg animate-pulse">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -564,6 +678,18 @@ export default function ScannerTerminal() {
         </div>
 
         <div className="flex items-center gap-3 pointer-events-auto">
+          {/* Quick Lock Button (visible when PIN is required and terminal settings are unlocked) */}
+          {requirePinForSettings && isSettingsUnlocked && (
+            <button
+              onClick={() => setIsSettingsUnlocked(false)}
+              className="px-3 py-2 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-amber-300 hover:text-amber-200 border border-amber-500/30 flex items-center gap-1.5 text-xs font-semibold active:scale-95 transition-all shadow-xl"
+              title="Lock Settings (Requires PIN to access settings again)"
+            >
+              <LockOpen className="w-3.5 h-3.5 text-amber-400" />
+              <span>Unlocked</span>
+            </button>
+          )}
+
           {/* Fullscreen Toggle */}
           <button 
             onClick={toggleFullscreen}
@@ -575,11 +701,16 @@ export default function ScannerTerminal() {
           
           {/* Settings Button */}
           <button 
-            onClick={() => setShowSettingsPin(true)}
-            className="p-3 bg-black/60 backdrop-blur-md rounded-full text-white/70 hover:text-white border border-white/10 active:scale-95 transition-all shadow-xl"
-            title="Admin Settings"
+            onClick={handleOpenSettings}
+            className="relative p-3 bg-black/60 backdrop-blur-md rounded-full text-white/70 hover:text-white border border-white/10 active:scale-95 transition-all shadow-xl"
+            title={requirePinForSettings && !isSettingsUnlocked ? "Admin Settings (PIN Locked)" : "Admin Settings"}
           >
             <Settings className="w-5 h-5" />
+            {requirePinForSettings && !isSettingsUnlocked && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-slate-800 border border-white/20 rounded-full flex items-center justify-center shadow-md">
+                <Lock className="w-2.5 h-2.5 text-amber-400" />
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -644,7 +775,13 @@ export default function ScannerTerminal() {
       {/* --- MODALS & DIALOGS --- */}
 
       {/* PIN Verification for Settings */}
-      <Dialog open={showSettingsPin} onOpenChange={setShowSettingsPin}>
+      <Dialog open={showSettingsPin} onOpenChange={(open) => {
+        setShowSettingsPin(open)
+        if (!open) {
+          setSettingsPin('')
+          setSettingsPinError(false)
+        }
+      }}>
         <DialogContent className="sm:max-w-md text-[var(--body-text)]">
           <DialogHeader>
             <DialogTitle>Admin Verification</DialogTitle>
@@ -765,16 +902,25 @@ export default function ScannerTerminal() {
               <div className="p-4 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl shadow-sm flex items-center justify-between gap-3">
                 <div>
                   <div className="text-sm font-bold text-[var(--body-text)]">SMS Alerts</div>
-                  <div className="text-xs text-[var(--sidebar-muted)] mt-0.5">{sendSms ? 'Enabled' : 'Disabled'}</div>
+                  <div className="text-xs text-[var(--sidebar-muted)] mt-0.5">
+                    {!globalSmsEnabled ? 'Blocked Globally (Admin Mode)' : sendSms ? 'Enabled' : 'Disabled'}
+                  </div>
                 </div>
                 <button
                   type="button"
                   role="switch"
-                  aria-checked={sendSms}
+                  aria-checked={sendSms && globalSmsEnabled}
+                  disabled={!globalSmsEnabled}
                   onClick={() => setSendSms(v => !v)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${sendSms ? 'bg-[var(--primary)]' : 'bg-[var(--row-alt)] border border-[var(--card-border)]'}`}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                    !globalSmsEnabled ? 'bg-amber-500/40 cursor-not-allowed' :
+                    sendSms ? 'bg-[var(--primary)]' : 'bg-[var(--row-alt)] border border-[var(--card-border)]'
+                  }`}
+                  title={!globalSmsEnabled ? 'SMS is blocked school-wide in Admin System Settings' : 'Toggle SMS alerts'}
                 >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${sendSms ? 'translate-x-6' : 'translate-x-1'}`} />
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    sendSms && globalSmsEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
                 </button>
               </div>
 
@@ -794,6 +940,54 @@ export default function ScannerTerminal() {
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${debugMode ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
               </div>
+            </div>
+
+            {/* Terminal Security (PIN Lock Settings) */}
+            <div className="p-4 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl shadow-sm space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-amber-500/10 rounded-lg text-amber-500 mt-0.5">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-[var(--body-text)]">Require PIN for Settings</div>
+                    <div className="text-xs text-[var(--sidebar-muted)] mt-0.5">
+                      {requirePinForSettings
+                        ? 'PIN is required to open this settings panel'
+                        : 'Unrestricted access (no PIN required)'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={requirePinForSettings}
+                  onClick={() => handleToggleRequirePin(!requirePinForSettings)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${requirePinForSettings ? 'bg-[var(--primary)]' : 'bg-[var(--row-alt)] border border-[var(--card-border)]'}`}
+                  title="Toggle PIN requirement for settings"
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${requirePinForSettings ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              {requirePinForSettings && (
+                <div className="pt-2 border-t border-[var(--card-border)] flex items-center justify-between gap-2">
+                  <span className="text-xs text-[var(--sidebar-muted)]">
+                    Session security: <span className="font-semibold text-amber-400">Unlocked</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSettingsUnlocked(false)
+                      setShowAdminDrawer(false)
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold bg-[var(--row-alt)] hover:bg-amber-500/20 hover:text-amber-400 text-[var(--body-text)] border border-[var(--card-border)] rounded-lg transition-colors flex items-center gap-1.5 active:scale-95"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Lock Settings Now</span>
+                  </button>
+                </div>
+              )}
             </div>
 
           </div>

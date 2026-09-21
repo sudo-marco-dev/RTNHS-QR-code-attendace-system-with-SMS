@@ -13,6 +13,7 @@ import ScheduleManager from '../../components/admin/ScheduleManager'
 import QrExporter from '../../components/teacher/QrExporter'
 import AttendanceExporter from '../../components/admin/AttendanceExporter'
 import PhotoVerification from './PhotoVerification'
+import SystemSettings from '../../components/admin/SystemSettings'
 
 export default function AdminDashboard() {
   const { role } = useAuth()
@@ -55,6 +56,7 @@ export default function AdminDashboard() {
     { name: 'Export QR', path: '/admin/qr-export' },
     { name: 'Export Attendance', path: '/admin/attendance-export' },
     { name: 'Photo Verification', path: '/admin/photo-verify' },
+    { name: 'System Settings', path: '/admin/settings' },
   ]
 
   const SidebarContent = () => (
@@ -205,6 +207,7 @@ export default function AdminDashboard() {
                 <Route path="qr-export" element={<QrExporter />} />
                 <Route path="attendance-export" element={<AttendanceExporter />} />
                 <Route path="photo-verify" element={<PhotoVerification />} />
+                <Route path="settings" element={<SystemSettings />} />
               </Routes>
             </div>
           </div>
