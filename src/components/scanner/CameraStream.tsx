@@ -595,14 +595,14 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
                 primaryCam === 'esp32' ? 'order-1' : 'order-2'
               }`
             : isEsp32PiP
-            ? 'absolute z-30 touch-none select-none rounded-2xl border-2 border-white/25 shadow-2xl bg-zinc-950 w-52 sm:w-64 aspect-[4/3] cursor-grab active:cursor-grabbing hover:border-emerald-400/60'
+            ? 'absolute z-20 touch-none select-none rounded-2xl border-2 border-white/25 shadow-2xl bg-zinc-950 w-52 sm:w-64 aspect-[4/3] cursor-grab active:cursor-grabbing hover:border-emerald-400/60'
             : 'absolute inset-0 z-0'
         }`}
         style={
           isEsp32PiP && pipPos
             ? { left: `${pipPos.x}px`, top: `${pipPos.y}px` }
             : isEsp32PiP
-            ? { left: '16px', bottom: '88px' }
+            ? { left: '16px', bottom: '100px' }
             : undefined
         }
       >
@@ -627,9 +627,9 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
           </div>
         )}
 
-        {/* Split Screen Header Badge */}
+        {/* Split Screen Header Badge — bottom center to avoid parent header overlap */}
         {isSplit && (
-          <div className="absolute top-3 left-3 z-20 px-2.5 py-1 bg-black/60 backdrop-blur-md border border-white/10 rounded-full text-white/80 text-xs font-semibold flex items-center gap-1.5 pointer-events-none">
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 px-2.5 py-1 bg-black/60 backdrop-blur-md border border-white/10 rounded-full text-white/80 text-xs font-semibold flex items-center gap-1.5 pointer-events-none whitespace-nowrap">
             <div className={`w-2 h-2 rounded-full ${esp32FrameOk ? 'bg-emerald-400' : 'bg-red-400'}`} />
             <span>ESP32 QR Scanner</span>
           </div>
@@ -717,14 +717,14 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
                 primaryCam === 'phone' ? 'order-1' : 'order-2'
               }`
             : isPhonePiP
-            ? 'absolute z-30 touch-none select-none rounded-2xl border-2 border-white/25 shadow-2xl bg-zinc-950 w-36 sm:w-48 aspect-[3/4] cursor-grab active:cursor-grabbing hover:border-emerald-400/60'
+            ? 'absolute z-20 touch-none select-none rounded-2xl border-2 border-white/25 shadow-2xl bg-zinc-950 w-36 sm:w-48 aspect-[3/4] cursor-grab active:cursor-grabbing hover:border-emerald-400/60'
             : 'absolute inset-0 z-0'
         }`}
         style={
           isPhonePiP && pipPos
             ? { left: `${pipPos.x}px`, top: `${pipPos.y}px` }
             : isPhonePiP
-            ? { left: '16px', bottom: '88px' }
+            ? { left: '16px', bottom: '100px' }
             : undefined
         }
       >
@@ -757,20 +757,20 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
           </div>
         )}
 
-        {/* Split Screen Header Badge */}
+        {/* Split Screen Header Badge — bottom center to avoid parent header overlap */}
         {isSplit && (
-          <div className="absolute top-3 left-3 z-20 px-2.5 py-1 bg-black/60 backdrop-blur-md border border-white/10 rounded-full text-white/80 text-xs font-semibold flex items-center gap-1.5 pointer-events-none">
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 px-2.5 py-1 bg-black/60 backdrop-blur-md border border-white/10 rounded-full text-white/80 text-xs font-semibold flex items-center gap-1.5 pointer-events-none whitespace-nowrap">
             <div className={`w-2 h-2 rounded-full ${faceActive ? 'bg-emerald-400' : 'bg-red-400'}`} />
             <span>Face Verification Cam</span>
           </div>
         )}
 
-        {/* Split Screen flip button */}
+        {/* Split Screen flip button — bottom left to avoid dual cam toolbar overlap */}
         {isSplit && (
           <button
             type="button"
             onClick={flipFaceCamera}
-            className="absolute top-3 right-3 z-20 p-2 bg-black/60 backdrop-blur-md text-white rounded-full hover:bg-black/80 transition-colors"
+            className="absolute bottom-3 left-3 z-20 p-2 bg-black/60 backdrop-blur-md text-white rounded-full hover:bg-black/80 transition-colors"
             title="Switch Camera (Front/Rear)"
           >
             <SwitchCamera className="w-4 h-4" />
@@ -794,8 +794,8 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
         <canvas ref={faceCanvasRef} className="hidden" />
       </div>
 
-      {/* 3. Floating Dual Camera Toolbar */}
-      <div className="absolute top-20 right-4 md:top-24 md:right-6 z-20 flex items-center gap-1.5 p-1 bg-black/60 backdrop-blur-md border border-white/15 rounded-full shadow-2xl pointer-events-auto">
+      {/* 3. Floating Dual Camera Toolbar — centered vertically on right edge to avoid header overlap */}
+      <div className="absolute top-1/2 -translate-y-1/2 right-4 md:right-6 z-20 flex flex-col items-center gap-1.5 p-1 bg-black/60 backdrop-blur-md border border-white/15 rounded-full shadow-2xl pointer-events-auto">
         {/* Split Screen / PiP Toggle */}
         <button
           type="button"
@@ -841,16 +841,16 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
         )}
       </div>
 
-      {/* 4. Top-Left: Debug Badge */}
+      {/* 4. Debug Badge — centered vertically on left edge */}
       {debug && (
-        <div className="absolute top-20 left-4 md:top-24 md:left-6 z-20 px-2.5 py-1 bg-amber-500/90 text-black text-xs font-bold rounded-full flex items-center gap-1 backdrop-blur-sm shadow-lg pointer-events-none">
+        <div className="absolute top-1/2 -translate-y-1/2 left-4 md:left-6 z-20 px-2.5 py-1 bg-amber-500/90 text-black text-xs font-bold rounded-full flex items-center gap-1 backdrop-blur-sm shadow-lg pointer-events-none">
           <Bug className="w-3.5 h-3.5" /> DEBUG MODE
         </div>
       )}
 
       {/* 5. Bottom Status Label */}
       {viewMode === 'pip' && (
-        <div className="absolute bottom-3 left-0 right-0 text-center z-20 pointer-events-none">
+        <div className="absolute bottom-20 left-0 right-0 text-center z-20 pointer-events-none">
           <span className="text-xs text-white/70 bg-black/50 backdrop-blur-sm px-3 py-1 rounded-full border border-white/10">
             {debug
               ? 'Debug mode — no attendance recorded'

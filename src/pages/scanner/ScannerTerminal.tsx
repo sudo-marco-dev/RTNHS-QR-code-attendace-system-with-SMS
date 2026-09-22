@@ -609,8 +609,11 @@ export default function ScannerTerminal() {
       <div className="absolute inset-0 flex items-center justify-center bg-black">
         <CameraStream 
           ref={cameraStreamRef} 
-          onScan={processCode} 
-          active={phase === 'scanning' && !isHydrating && !showAdminDrawer && !showHistoryModal && !showManualModal} 
+          onScan={(code) => {
+            if (showAdminDrawer || showHistoryModal || showManualModal) return
+            processCode(code)
+          }} 
+          active={phase === 'scanning' && !isHydrating} 
           debug={debugMode} 
           esp32Url={esp32Url} 
         />
@@ -682,11 +685,10 @@ export default function ScannerTerminal() {
           {requirePinForSettings && isSettingsUnlocked && (
             <button
               onClick={() => setIsSettingsUnlocked(false)}
-              className="px-3 py-2 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-amber-300 hover:text-amber-200 border border-amber-500/30 flex items-center gap-1.5 text-xs font-semibold active:scale-95 transition-all shadow-xl"
+              className="p-3 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-amber-300 hover:text-amber-200 border border-amber-500/30 active:scale-95 transition-all shadow-xl"
               title="Lock Settings (Requires PIN to access settings again)"
             >
-              <LockOpen className="w-3.5 h-3.5 text-amber-400" />
-              <span>Unlocked</span>
+              <LockOpen className="w-5 h-5 text-amber-400" />
             </button>
           )}
 

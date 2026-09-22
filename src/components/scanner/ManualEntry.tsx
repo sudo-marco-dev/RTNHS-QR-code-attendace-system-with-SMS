@@ -25,8 +25,8 @@ export default function ManualEntry({ students, onSubmit }: ManualEntryProps) {
   const filtered = query.trim() === '' 
     ? [] 
     : students.filter(s => 
-        s.full_name.toLowerCase().includes(query.toLowerCase()) || 
-        s.lrn.includes(query)
+        (s.full_name?.toLowerCase().includes(query.toLowerCase())) || 
+        (s.lrn?.includes(query))
       ).slice(0, 8) // Limit results
 
   useEffect(() => {

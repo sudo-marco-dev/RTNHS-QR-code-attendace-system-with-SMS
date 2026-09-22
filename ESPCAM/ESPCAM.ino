@@ -145,28 +145,72 @@ void drawCenteredText(const String& text, int y, int textSize = 1) {
   display.print(text);
 }
 
+// ---- Scrolling IP ticker state ----
+String ipScrollText = "";
+unsigned long ipScrollLastUpdate = 0;
+int ipScrollOffset = 0;
+
 // Top Status Bar (Height: 0 to 9px, dividing line at Y=10)
 void drawTopStatusBar() {
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE, SH110X_BLACK);
   display.setTextWrap(false);
 
-  // Left: WiFi status & short IP
-  display.setCursor(0, 0);
+  // Build the full IP string
+  String ipText = "";
   if (isAPMode) {
-    display.print("AP: 192.168.4.1");
+    ipText = "AP:192.168.4.1";
   } else if (WiFi.status() == WL_CONNECTED) {
     IPAddress ip = WiFi.localIP();
-    display.print("W:OK .");
-    display.print(ip[3]);
+    ipText = String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
   } else {
-    display.print("NO WIFI");
+    ipText = "NO WIFI";
   }
 
   // Right: Total Scans count badge
   String countBadge = "[#" + String(totalScans) + "]";
   int badgeWidth = countBadge.length() * 6;
-  display.setCursor(SCREEN_WIDTH - badgeWidth, 0);
+  int badgeX = SCREEN_WIDTH - badgeWidth;
+
+  // Available pixel width for IP (leave 1 char gap before badge)
+  int availableWidth = badgeX - 6; // 6px gap
+  int ipPixelWidth = ipText.length() * 6;
+
+  display.setCursor(0, 0);
+
+  if (ipPixelWidth <= availableWidth) {
+    // Fits — just print it
+    display.print(ipText);
+    ipScrollText = ""; // reset scroll state
+  } else {
+    // Doesn't fit — horizontal scroll ticker
+    // Pad with spaces for smooth wrap-around
+    String padded = ipText + "   " + ipText;
+    int maxOffset = ipText.length() + 3; // length of one cycle
+
+    // Update scroll position every 300ms
+    unsigned long now = millis();
+    if (ipScrollText != ipText) {
+      // IP changed, reset scroll
+      ipScrollText = ipText;
+      ipScrollOffset = 0;
+      ipScrollLastUpdate = now;
+    }
+    if (now - ipScrollLastUpdate >= 300) {
+      ipScrollLastUpdate = now;
+      ipScrollOffset = (ipScrollOffset + 1) % maxOffset;
+    }
+
+    // Calculate how many chars fit in available width
+    int maxChars = availableWidth / 6;
+    if (maxChars < 1) maxChars = 1;
+
+    String visible = padded.substring(ipScrollOffset, ipScrollOffset + maxChars);
+    display.print(visible);
+  }
+
+  // Draw badge on the right
+  display.setCursor(badgeX, 0);
   display.print(countBadge);
 
   // Thin dividing line
@@ -696,9 +740,10 @@ void loop() {
   } else {
     server.handleClient();
 
-    // Periodic refresh every 4 seconds to update WiFi IP/status if needed
+    // Periodic OLED refresh — faster when IP scroll ticker is active
     unsigned long now = millis();
-    if (now - lastOledPeriodicUpdate >= 4000) {
+    unsigned long refreshInterval = (ipScrollText.length() > 0) ? 350 : 4000;
+    if (now - lastOledPeriodicUpdate >= refreshInterval) {
       lastOledPeriodicUpdate = now;
       updateOLED();
     }
