@@ -6,7 +6,9 @@ import ScheduleCards from '../../components/teacher/ScheduleCards'
 import AttendanceGrid from '../../components/teacher/AttendanceGrid'
 import StatsPanel from '../../components/teacher/StatsPanel'
 import QrExporter from '../../components/teacher/QrExporter'
-import { Calendar, BarChart3, LineChart, QrCode, LogOut, User, BookOpen } from 'lucide-react'
+import AttendanceExporter from '../../components/admin/AttendanceExporter'
+import PhotoVerification from '../../components/shared/PhotoVerification'
+import { Calendar, BarChart3, LineChart, QrCode, LogOut, User, BookOpen, Camera, FileSpreadsheet } from 'lucide-react'
 import { ThemeToggle } from '../../components/ui/ThemeToggle'
 
 export default function TeacherDashboard() {
@@ -35,6 +37,8 @@ export default function TeacherDashboard() {
     { name: 'Attendance Analytics', path: '/teacher/attendance', icon: BarChart3 },
     { name: 'Dashboard Stats', path: '/teacher/stats', icon: LineChart },
     { name: 'QR Code Exporter', path: '/teacher/qr-export', icon: QrCode },
+    { name: 'Export Attendance', path: '/teacher/attendance-export', icon: FileSpreadsheet },
+    { name: 'Photo Verification', path: '/teacher/photo-verify', icon: Camera },
   ]
 
   const SidebarContent = () => (
@@ -156,6 +160,8 @@ export default function TeacherDashboard() {
                 <Route path="attendance" element={<AttendanceGrid />} />
                 <Route path="stats" element={<StatsPanel />} />
                 <Route path="qr-export" element={<QrExporter />} />
+                <Route path="attendance-export" element={<AttendanceExporter />} />
+                <Route path="photo-verify" element={<PhotoVerification />} />
               </Routes>
             </div>
           </div>

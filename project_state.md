@@ -31,6 +31,8 @@ The application is divided into three distinct user portals, protected by role-b
 - **Student Roster Management**: Manage individual students via `StudentManager` with Edit and Delete functionality. Features bulk selection with search, sorting (A-Z/Z-A), select all, deselect all, invert selection, and bulk deletion with confirmation dialog.
 - **Student Import**: Bulk import student records via drag-and-drop or file browse (CSV/XLSX) with fuzzy column matching. Import preview is fully selectable with search, sorting, select all/deselect/invert controls — only selected rows are imported. LRNs are optional.
 - **Export QR**: Generates PDF/PNG QR codes for sections. Students are individually selectable for export with search, sorting, select all/deselect/invert controls. Admin privilege bypasses teacher-assignment limits.
+- **Export Attendance**: Generate highly detailed multi-sheet Excel reports of class attendance for any given month, complete with weekly time-in/out breakdowns.
+- **Photo Verification**: Review face verification photos captured during QR scans. Features dynamic date filtering displaying only dates with available photos.
 
 ### 2. Teacher Portal (`/teacher/*`)
 **Purpose**: Tools for teachers to track and manage their classes' attendance.
@@ -40,6 +42,8 @@ The application is divided into three distinct user portals, protected by role-b
 - **Schedule Cards**: Visual representation of the teacher's assigned classes.
 - **Stats Panel**: Analytics and overview of attendance statistics.
 - **QR Exporter**: Generate and export QR codes for students in assigned sections. Students are individually selectable for bulk PDF export with search, sorting, and selection controls.
+- **Export Attendance**: Same as admin, restricted to teacher's assigned sections. Generate highly detailed multi-sheet Excel reports of class attendance.
+- **Photo Verification**: Same as admin, restricted to teacher's assigned sections. Review face verification photos captured during QR scans. Features dynamic date filtering.
 
 ### 3. Scanner Terminal (`/scanner`)
 **Purpose**: A dedicated kiosk/terminal interface for scanning student QR codes as they enter/leave.

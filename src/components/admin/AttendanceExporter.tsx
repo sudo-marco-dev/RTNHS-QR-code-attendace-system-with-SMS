@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { Download, AlertCircle, FileSpreadsheet } from 'lucide-react'
 import { format } from 'date-fns'
 import { exportAttendanceExcel } from '../../lib/excelExport'
+import { useAuth } from '../../context/AuthContext'
 
 interface Section {
   id: string
@@ -11,6 +12,7 @@ interface Section {
 }
 
 export default function AttendanceExporter() {
+  const { user, role } = useAuth()
   const [sections, setSections] = useState<Section[]>([])
   const [selectedSection, setSelectedSection] = useState<string>('')
   const [monthYear, setMonthYear] = useState<string>(format(new Date(), 'yyyy-MM'))
@@ -21,17 +23,38 @@ export default function AttendanceExporter() {
 
   useEffect(() => {
     const fetchSections = async () => {
-      const { data, error } = await supabase
-        .from('sections')
-        .select('id, name, grade_level')
-        .order('grade_level')
-        .order('name')
+      if (!user) return
       
-      if (data) setSections(data)
-      if (error) setError('Failed to load sections')
+      if (role === 'admin') {
+        const { data, error } = await supabase
+          .from('sections')
+          .select('id, name, grade_level')
+          .order('grade_level')
+          .order('name')
+        
+        if (data) setSections(data)
+        if (error) setError('Failed to load sections')
+      } else {
+        const { data, error } = await supabase
+          .from('teacher_assignments')
+          .select(`
+            section_id,
+            sections:sections!section_id(id, name, grade_level)
+          `)
+          .eq('teacher_id', user.id)
+          
+        if (data) {
+          const uniqueSections = new Map()
+          data.forEach(item => {
+            if (item.sections) uniqueSections.set(item.section_id, item.sections)
+          })
+          setSections(Array.from(uniqueSections.values()))
+        }
+        if (error) setError('Failed to load sections')
+      }
     }
     fetchSections()
-  }, [])
+  }, [user, role])
 
   const handleExport = async () => {
     if (!selectedSection) {

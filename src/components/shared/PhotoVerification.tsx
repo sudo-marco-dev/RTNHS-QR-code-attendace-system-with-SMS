@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabase'
 import { Camera, CameraOff, Search, ChevronLeft, ChevronRight, X, Filter, RefreshCw } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
 
 const supabaseServiceRole = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -32,8 +33,10 @@ const WINDOW_LABELS: Record<string, string> = {
 }
 
 export default function PhotoVerification() {
+  const { user, role } = useAuth()
   const [sections, setSections] = useState<Section[]>([])
   const [selectedSection, setSelectedSection] = useState('')
+  const [availableDates, setAvailableDates] = useState<string[]>([])
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [selectedWindow, setSelectedWindow] = useState<string>('all')
   const [logs, setLogs] = useState<AttendanceLog[]>([])
@@ -47,11 +50,51 @@ export default function PhotoVerification() {
   // Fetch sections
   useEffect(() => {
     const fetchSections = async () => {
-      const { data } = await supabase.from('sections').select('id, name, grade_level').order('grade_level').order('name')
-      if (data) setSections(data)
+      if (!user) return
+      if (role === 'admin') {
+        const { data } = await supabase.from('sections').select('id, name, grade_level').order('grade_level').order('name')
+        if (data) setSections(data)
+      } else {
+        const { data } = await supabase
+          .from('teacher_assignments')
+          .select('section_id, sections:sections!section_id(id, name, grade_level)')
+          .eq('teacher_id', user.id)
+        if (data) {
+          const uniqueSections = new Map()
+          data.forEach((item: any) => {
+            if (item.sections) uniqueSections.set(item.section_id, item.sections)
+          })
+          setSections(Array.from(uniqueSections.values()))
+        }
+      }
     }
     fetchSections()
-  }, [])
+  }, [user, role])
+
+  // Fetch available dates for selected section
+  useEffect(() => {
+    const fetchDates = async () => {
+      if (!selectedSection) {
+        setAvailableDates([])
+        return
+      }
+      const { data } = await supabaseServiceRole
+        .from('attendance_logs')
+        .select('scanned_at, scan_windows!inner(section_id)')
+        .not('verification_photo_url', 'is', null)
+        .eq('scan_windows.section_id', selectedSection)
+        .order('scanned_at', { ascending: false })
+      
+      if (data) {
+        const dates = Array.from(new Set(data.map(d => d.scanned_at.split('T')[0])))
+        setAvailableDates(dates)
+        if (dates.length > 0 && !dates.includes(selectedDate)) {
+          setSelectedDate(dates[0])
+        }
+      }
+    }
+    fetchDates()
+  }, [selectedSection])
 
   // Fetch attendance logs with photos
   const fetchLogs = useCallback(async (silent = false) => {
@@ -158,12 +201,24 @@ export default function PhotoVerification() {
           ))}
         </select>
 
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={e => setSelectedDate(e.target.value)}
-          className="px-3 py-2 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-sm text-[var(--body-text)] min-h-[44px]"
-        />
+        {availableDates.length > 0 ? (
+          <select
+            value={selectedDate}
+            onChange={e => setSelectedDate(e.target.value)}
+            className="px-3 py-2 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-sm text-[var(--body-text)] min-h-[44px]"
+          >
+            {availableDates.map(date => (
+              <option key={date} value={date}>{date}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={e => setSelectedDate(e.target.value)}
+            className="px-3 py-2 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-sm text-[var(--body-text)] min-h-[44px]"
+          />
+        )}
 
         <select
           value={selectedWindow}

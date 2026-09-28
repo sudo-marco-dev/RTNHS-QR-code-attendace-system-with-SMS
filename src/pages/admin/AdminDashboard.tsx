@@ -12,7 +12,7 @@ import SubjectManager from '../../components/admin/SubjectManager'
 import ScheduleManager from '../../components/admin/ScheduleManager'
 import QrExporter from '../../components/teacher/QrExporter'
 import AttendanceExporter from '../../components/admin/AttendanceExporter'
-import PhotoVerification from './PhotoVerification'
+import PhotoVerification from '../../components/shared/PhotoVerification'
 import SystemSettings from '../../components/admin/SystemSettings'
 
 export default function AdminDashboard() {
