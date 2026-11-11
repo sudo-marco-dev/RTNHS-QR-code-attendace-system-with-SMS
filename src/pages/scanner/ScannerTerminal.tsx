@@ -8,7 +8,7 @@ import ESP32Settings from '../../components/scanner/ESP32Settings'
 import StateControls from '../../components/scanner/StateControls'
 import type { ScanWindow, WindowType } from '../../components/scanner/StateControls'
 import { playSuccess, playDuplicate, playError } from '../../components/scanner/AudioFeedback'
-import { Bug, QrCode, CheckCircle2, XCircle, Zap, Settings, Keyboard, History, Loader2, Maximize, Minimize, ArrowLeft, ShieldAlert, Lock, LockOpen, MessageSquare } from 'lucide-react'
+import { Bug, QrCode, CheckCircle2, XCircle, Zap, Settings, Keyboard, History, Loader2, Maximize, Minimize, ArrowLeft, ShieldAlert, ShieldCheck, Lock, LockOpen, MessageSquare } from 'lucide-react'
 import { sendAttendanceSms, formatPhilippinePhoneNumber, fetchTextBeeQuota, type TextBeeQuotaInfo } from '../../lib/sms'
 import { useNavigate } from 'react-router-dom'
 import ManualEntry from '../../components/scanner/ManualEntry'
@@ -101,6 +101,12 @@ export default function ScannerTerminal() {
   // Local switch & Global Admin SMS switch
   const [sendSms, setSendSms] = useState(true);
   const [globalSmsEnabled, setGlobalSmsEnabled] = useState<boolean>(true);
+
+  // Biometric Anti-Proxy Face Verification Switch (persisted in localStorage)
+  const [faceVerificationEnabled, setFaceVerificationEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem('rtnhs_face_verification_enabled')
+    return saved !== null ? saved === 'true' : true
+  });
 
   const [completedWindows, setCompletedWindows] = useState<WindowType[]>([])
   const [confirmReopenType, setConfirmReopenType] = useState<WindowType | null>(null)
@@ -432,6 +438,23 @@ export default function ScannerTerminal() {
       return
     }
 
+    // Biometric Anti-Proxy Gating: verify student is facing the camera
+    if (faceVerificationEnabled && cameraStreamRef.current) {
+      const isVerified = cameraStreamRef.current.isFaceVerified()
+      if (!isVerified) {
+        const faceResult = cameraStreamRef.current.getFaceResult()
+        playError()
+        showFeedback({
+          studentName: 'Face Verification Required',
+          lrn: code,
+          status: 'ERROR',
+          message: faceResult?.message || 'Please face the camera directly while scanning.'
+        })
+        notifyEspScreen('error', 'Face Camera', 'Look at Lens', 'ERR', 'Face Required')
+        return
+      }
+    }
+
     // Find student by qr_code first, then lrn
     const student = students.find(s => s.qr_code === code || s.lrn === code)
     console.log('[SCANNER] Student fetched:', student)
@@ -628,13 +651,14 @@ export default function ScannerTerminal() {
           active={phase === 'scanning' && !isHydrating} 
           debug={debugMode} 
           esp32Url={esp32Url} 
+          faceVerificationEnabled={faceVerificationEnabled}
         />
       </div>
 
       {/* 2. Top Header Overlay */}
       <div className="relative z-10 p-4 md:p-6 flex justify-between items-start pointer-events-none">
         <div className="flex flex-col gap-2 pointer-events-auto">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Back / Exit Button */}
             <button
               onClick={() => navigate('/login')}
@@ -650,6 +674,36 @@ export default function ScannerTerminal() {
               <span className="text-white/40">•</span>
               <span className="text-emerald-400">{windowType.replace('_', ' ').toUpperCase()}</span>
             </div>
+
+            {/* Biometric Anti-Proxy Gate Pill */}
+            <button
+              type="button"
+              onClick={() => {
+                setFaceVerificationEnabled(prev => {
+                  const next = !prev
+                  localStorage.setItem('rtnhs_face_verification_enabled', String(next))
+                  return next
+                })
+              }}
+              className={`cursor-pointer px-3 py-1.5 backdrop-blur-md rounded-full text-xs font-semibold border flex items-center gap-1.5 shadow-lg transition-all active:scale-95 ${
+                faceVerificationEnabled
+                  ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/80'
+                  : 'bg-black/60 border-white/10 text-white/60 hover:text-white'
+              }`}
+              title={faceVerificationEnabled ? 'Biometric Face Verification Active (Click to bypass)' : 'Biometric Face Verification Disabled (Click to enable)'}
+            >
+              {faceVerificationEnabled ? (
+                <>
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Face Gate: ON</span>
+                </>
+              ) : (
+                <>
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Face Gate: OFF</span>
+                </>
+              )}
+            </button>
 
             {/* Daily SMS Quota Monitor Pill */}
             {smsQuota && (
@@ -985,6 +1039,34 @@ export default function ScannerTerminal() {
                   className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${debugMode ? 'bg-amber-500' : 'bg-[var(--row-alt)] border border-[var(--card-border)]'}`}
                 >
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${debugMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              {/* Biometric Anti-Proxy Face Verification Switch */}
+              <div className="p-4 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl shadow-sm flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold text-[var(--body-text)] flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                    <span>Face Verification Gate</span>
+                  </div>
+                  <div className="text-xs text-[var(--sidebar-muted)] mt-0.5">
+                    {faceVerificationEnabled ? 'Blocks scan unless student faces camera' : 'Disabled (No face check required)'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={faceVerificationEnabled}
+                  onClick={() => {
+                    setFaceVerificationEnabled(v => {
+                      const next = !v
+                      localStorage.setItem('rtnhs_face_verification_enabled', String(next))
+                      return next
+                    })
+                  }}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${faceVerificationEnabled ? 'bg-emerald-600' : 'bg-[var(--row-alt)] border border-[var(--card-border)]'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${faceVerificationEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
               </div>
             </div>

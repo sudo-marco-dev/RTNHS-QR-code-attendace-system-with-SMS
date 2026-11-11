@@ -1,5 +1,12 @@
 import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react'
 import jsQR from 'jsqr'
+import type { FaceDetector } from '@mediapipe/tasks-vision'
+import {
+  getFaceDetector,
+  validateFaceDetection,
+  type FaceValidationResult
+} from '../../lib/faceDetector'
+import FaceDetectionOverlay from './FaceDetectionOverlay'
 import {
   Loader2,
   Bug,
@@ -18,17 +25,87 @@ interface Props {
   active: boolean
   debug?: boolean
   esp32Url: string | null // null = use device camera for QR scanning (fallback mode)
+  faceVerificationEnabled?: boolean
 }
 
 export interface CameraStreamHandle {
   captureFacePhoto: () => string | null // returns base64 JPEG or null
+  isFaceVerified: () => boolean // returns true if student is facing the camera & verified
+  getFaceResult: () => FaceValidationResult | null
 }
 
 const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream(
-  { onScan, active, debug = false, esp32Url },
+  { onScan, active, debug = false, esp32Url, faceVerificationEnabled = true },
   ref
 ) {
   const [, forceRefresh] = useState(0)
+
+  // ---- Face Detection & Biometric Gating State ----
+  const [faceValidationResult, setFaceValidationResult] = useState<FaceValidationResult | null>(null)
+  const faceValidationResultRef = useRef<FaceValidationResult | null>(null)
+  const faceDetectorRef = useRef<FaceDetector | null>(null)
+
+  useEffect(() => {
+    faceValidationResultRef.current = faceValidationResult
+  }, [faceValidationResult])
+
+  // Initialize MediaPipe FaceDetector once
+  useEffect(() => {
+    let isMounted = true
+    getFaceDetector().then(detector => {
+      if (isMounted && detector) {
+        faceDetectorRef.current = detector
+      }
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  // Real-time face detection loop running at ~10 FPS
+  useEffect(() => {
+    if (!active || !faceVerificationEnabled) {
+      setFaceValidationResult(null)
+      return
+    }
+
+    let isRunning = true
+    let timeoutId: any = null
+
+    const runDetection = () => {
+      if (!isRunning) return
+
+      const detector = faceDetectorRef.current
+      // In dual cam mode, the student's face is on faceVideoRef. In single cam fallback, it is on deviceVideoRef.
+      const video = esp32Url ? faceVideoRef.current : deviceVideoRef.current
+
+      if (detector && video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        try {
+          const now = performance.now()
+          const detectionResult = detector.detectForVideo(video, now)
+          const validation = validateFaceDetection(
+            detectionResult.detections,
+            video.videoWidth,
+            video.videoHeight
+          )
+          setFaceValidationResult(validation)
+        } catch (err) {
+          // Skip frame jitter
+        }
+      }
+
+      if (isRunning) {
+        timeoutId = setTimeout(runDetection, 100)
+      }
+    }
+
+    timeoutId = setTimeout(runDetection, 250)
+
+    return () => {
+      isRunning = false
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [active, esp32Url, faceVerificationEnabled])
 
   // ---- Shared scan timing ----
   const lastScanTime = useRef<number>(0)
@@ -270,11 +347,11 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
     }
   }, [esp32Rotation])
 
-  // ---- Expose face photo capture to parent ----
+  // ---- Expose face photo capture and biometric verification state to parent ----
   useImperativeHandle(ref, () => ({
     captureFacePhoto: (): string | null => {
-      const video = faceVideoRef.current
-      const canvas = faceCanvasRef.current
+      const video = esp32Url ? faceVideoRef.current : deviceVideoRef.current
+      const canvas = faceCanvasRef.current || deviceCanvasRef.current
       if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
         return null
       }
@@ -291,7 +368,14 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
       const ctx = canvas.getContext('2d')
       if (!ctx) return null
       ctx.drawImage(video, 0, 0, targetWidth, targetHeight)
-      return canvas.toDataURL('image/jpeg', 0.5)
+      return canvas.toDataURL('image/jpeg', 0.6)
+    },
+    isFaceVerified: (): boolean => {
+      if (!faceVerificationEnabled) return true
+      return faceValidationResultRef.current?.isVerified ?? false
+    },
+    getFaceResult: (): FaceValidationResult | null => {
+      return faceValidationResultRef.current
     }
   }))
 
@@ -521,7 +605,14 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
             </button>
           </div>
         ) : (
-          <video ref={deviceVideoRef} className="w-full h-full object-cover" muted playsInline />
+          <>
+            <video ref={deviceVideoRef} className="w-full h-full object-cover" muted playsInline />
+            <FaceDetectionOverlay
+              result={faceValidationResult}
+              enabled={!!faceVerificationEnabled}
+              mirrored={facingMode === 'user'}
+            />
+          </>
         )}
         <canvas ref={deviceCanvasRef} className="hidden" />
 
@@ -783,13 +874,20 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
             <span className="text-xs text-amber-400 leading-tight block">Face Cam Error: {faceError}</span>
           </div>
         ) : (
-          <video
-            ref={faceVideoRef}
-            className="w-full h-full object-cover pointer-events-none"
-            muted
-            playsInline
-            style={{ transform: faceFacingMode === 'user' ? 'scaleX(-1)' : 'none' }}
-          />
+          <>
+            <video
+              ref={faceVideoRef}
+              className="w-full h-full object-cover pointer-events-none"
+              muted
+              playsInline
+              style={{ transform: faceFacingMode === 'user' ? 'scaleX(-1)' : 'none' }}
+            />
+            <FaceDetectionOverlay
+              result={faceValidationResult}
+              enabled={!!faceVerificationEnabled}
+              mirrored={faceFacingMode === 'user'}
+            />
+          </>
         )}
         <canvas ref={faceCanvasRef} className="hidden" />
       </div>
