@@ -1,7 +1,7 @@
 const TEXTBEE_API_KEY = (import.meta.env.VITE_TEXTBEE_API_KEY || '') as string;
 const TEXTBEE_DEVICE_ID = (import.meta.env.VITE_TEXTBEE_DEVICE_ID || '') as string;
 
-export type SmsResult = 'sent' | 'failed' | 'no_phone';
+export type SmsResult = 'queued' | 'sent' | 'delivered' | 'failed' | 'no_phone' | 'quota_exceeded';
 
 export interface ScanSmsPayload {
   studentName: string;
@@ -9,6 +9,110 @@ export interface ScanSmsPayload {
   scanType: 'TIME IN' | 'TIME OUT';
   scannedAt: Date;
   parentPhone: string | null;
+  onStatusUpdate?: (status: SmsResult) => void;
+}
+
+export interface TextBeeQuotaInfo {
+  processedSmsToday: number;
+  dailyLimit: number;
+  processedSmsLastMonth: number;
+  monthlyLimit: number;
+  planName: string;
+  isActive: boolean;
+}
+
+/**
+ * Fetches live daily & monthly SMS quota usage from TextBee.dev billing API.
+ */
+export async function fetchTextBeeQuota(): Promise<TextBeeQuotaInfo | null> {
+  if (!TEXTBEE_API_KEY) return null;
+
+  try {
+    const res = await fetch('https://api.textbee.dev/api/v1/billing/current-subscription', {
+      headers: {
+        'x-api-key': TEXTBEE_API_KEY.trim(),
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    return {
+      processedSmsToday: data?.usage?.processedSmsToday ?? 0,
+      dailyLimit: data?.usage?.dailyLimit ?? data?.plan?.dailyLimit ?? 50,
+      processedSmsLastMonth: data?.usage?.processedSmsLastMonth ?? 0,
+      monthlyLimit: data?.usage?.monthlyLimit ?? data?.plan?.monthlyLimit ?? 300,
+      planName: data?.plan?.name ?? 'free',
+      isActive: Boolean(data?.isActive),
+    };
+  } catch (err) {
+    console.warn('[TextBee] Failed to fetch quota usage:', err);
+    return null;
+  }
+}
+
+/**
+ * Polls TextBee device messages endpoint to verify whether a queued SMS batch
+ * was actually dispatched ('sent') and confirmed ('delivered') by the carrier.
+ */
+export async function pollTextBeeDeliveryStatus(
+  smsBatchId: string,
+  onStatusUpdate?: (status: SmsResult) => void,
+  maxAttempts = 8,
+  intervalMs = 2000
+): Promise<SmsResult> {
+  if (!TEXTBEE_API_KEY || !TEXTBEE_DEVICE_ID || !smsBatchId) {
+    return 'queued';
+  }
+
+  let latestState: SmsResult = 'queued';
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+
+    try {
+      const res = await fetch(
+        `https://api.textbee.dev/api/v1/gateway/devices/${TEXTBEE_DEVICE_ID.trim()}/messages?limit=10`,
+        {
+          headers: {
+            'x-api-key': TEXTBEE_API_KEY.trim(),
+            'Accept': 'application/json',
+          },
+        }
+      );
+
+      if (!res.ok) continue;
+      const json = await res.json();
+      const messages: any[] = json?.data || [];
+      const match = messages.find((m) => m.smsBatch === smsBatchId);
+
+      if (!match) continue;
+
+      const rawStatus = String(match.status || '').toLowerCase();
+
+      if (rawStatus === 'delivered') {
+        latestState = 'delivered';
+        onStatusUpdate?.('delivered');
+        return 'delivered';
+      }
+
+      if (rawStatus === 'failed') {
+        latestState = 'failed';
+        onStatusUpdate?.('failed');
+        return 'failed';
+      }
+
+      if (rawStatus === 'sent' && latestState !== 'sent') {
+        latestState = 'sent';
+        onStatusUpdate?.('sent');
+      }
+    } catch (err) {
+      console.warn('[TextBee] Delivery poll attempt failed:', err);
+    }
+  }
+
+  return latestState;
 }
 
 /**
@@ -70,9 +174,8 @@ export function formatPhilippinePhoneNumber(phone: string | null | undefined): s
 }
 
 /**
- * Sends an SMS to the parent after a successful scan using TextBee.dev API.
- * Returns 'no_phone' if the student has no parent number on record.
- * Returns 'sent' on success, 'failed' on API error.
+ * Sends an SMS to the parent after a successful scan using TextBee.dev API,
+ * and polls the device to confirm actual carrier delivery.
  */
 export async function sendAttendanceSms(payload: ScanSmsPayload): Promise<SmsResult> {
   console.log('[SMS] sendAttendanceSms called with:', payload);
@@ -129,9 +232,24 @@ export async function sendAttendanceSms(payload: ScanSmsPayload): Promise<SmsRes
 
     const data = await response.json().catch(() => null);
 
+    if (response.status === 429 || (data?.message && String(data.message).toLowerCase().includes('limit'))) {
+      console.warn('[TextBee] Daily/Plan SMS quota reached:', data);
+      payload.onStatusUpdate?.('quota_exceeded');
+      return 'quota_exceeded';
+    }
+
     if (response.ok) {
-      console.log('[TextBee] Successfully queued/sent SMS:', data);
-      return 'sent';
+      const smsBatchId = data?.data?.smsBatchId;
+      console.log('[TextBee] Sent to API queue. Batch ID:', smsBatchId);
+      payload.onStatusUpdate?.('queued');
+
+      if (smsBatchId && TEXTBEE_DEVICE_ID) {
+        const finalDeliveryStatus = await pollTextBeeDeliveryStatus(smsBatchId, payload.onStatusUpdate);
+        console.log('[TextBee] Final delivery status for batch', smsBatchId, ':', finalDeliveryStatus);
+        return finalDeliveryStatus;
+      }
+
+      return 'queued';
     }
 
     console.error('[TextBee] API returned error:', response.status, data);

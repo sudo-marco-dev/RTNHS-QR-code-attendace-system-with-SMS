@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { fetchTextBeeQuota, type TextBeeQuotaInfo } from '../../lib/sms'
 import { MessageSquare, ShieldAlert, ShieldCheck, RefreshCw, Smartphone, Check, AlertTriangle, Info } from 'lucide-react'
 
 export default function SystemSettings() {
@@ -8,9 +9,13 @@ export default function SystemSettings() {
   const [saving, setSaving] = useState<boolean>(false)
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [quotaInfo, setQuotaInfo] = useState<TextBeeQuotaInfo | null>(null)
 
   const fetchSettings = async () => {
     setLoading(true)
+    fetchTextBeeQuota().then((q) => {
+      if (q) setQuotaInfo(q)
+    })
     try {
       const { data, error } = await supabase
         .from('system_settings')
@@ -204,6 +209,18 @@ export default function SystemSettings() {
             <div className="flex justify-between py-1 border-b border-[var(--card-border)]">
               <span className="text-[var(--sidebar-muted)]">Gateway Device</span>
               <span className="font-mono font-semibold text-[var(--body-text)]">{import.meta.env.VITE_TEXTBEE_DEVICE_ID || 'Active Android Gateway'}</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-[var(--card-border)]">
+              <span className="text-[var(--sidebar-muted)]">Daily SMS Quota</span>
+              <span className="font-mono font-bold text-cyan-500">
+                {quotaInfo ? `${quotaInfo.processedSmsToday} / ${quotaInfo.dailyLimit} used today` : 'Loading...'}
+              </span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-[var(--card-border)]">
+              <span className="text-[var(--sidebar-muted)]">Monthly SMS Quota</span>
+              <span className="font-mono font-semibold text-[var(--body-text)]">
+                {quotaInfo ? `${quotaInfo.processedSmsLastMonth} / ${quotaInfo.monthlyLimit} this month` : 'Loading...'}
+              </span>
             </div>
             <div className="flex justify-between py-1">
               <span className="text-[var(--sidebar-muted)]">Target Log Table</span>

@@ -8,8 +8,8 @@ import ESP32Settings from '../../components/scanner/ESP32Settings'
 import StateControls from '../../components/scanner/StateControls'
 import type { ScanWindow, WindowType } from '../../components/scanner/StateControls'
 import { playSuccess, playDuplicate, playError } from '../../components/scanner/AudioFeedback'
-import { Bug, QrCode, CheckCircle2, XCircle, Zap, Settings, Keyboard, History, Loader2, Maximize, Minimize, ArrowLeft, ShieldAlert, Lock, LockOpen } from 'lucide-react'
-import { sendAttendanceSms, formatPhilippinePhoneNumber } from '../../lib/sms'
+import { Bug, QrCode, CheckCircle2, XCircle, Zap, Settings, Keyboard, History, Loader2, Maximize, Minimize, ArrowLeft, ShieldAlert, Lock, LockOpen, MessageSquare } from 'lucide-react'
+import { sendAttendanceSms, formatPhilippinePhoneNumber, fetchTextBeeQuota, type TextBeeQuotaInfo } from '../../lib/sms'
 import { useNavigate } from 'react-router-dom'
 import ManualEntry from '../../components/scanner/ManualEntry'
 import ScanHistoryTab from '../../components/scanner/ScanHistoryTab'
@@ -89,8 +89,14 @@ export default function ScannerTerminal() {
   const [isHydrating, setIsHydrating] = useState(false)
   const [offlineQueue, setOfflineQueue] = useState<OfflineEntry[]>(() => loadOfflineQueue())
 
-  type SmsStatus = 'idle' | 'sending' | 'sent' | 'failed' | 'no_phone';
+  type SmsStatus = 'idle' | 'sending' | 'queued' | 'sent' | 'delivered' | 'failed' | 'no_phone' | 'quota_exceeded';
   const [smsStatus, setSmsStatus] = useState<SmsStatus>('idle');
+  const [smsQuota, setSmsQuota] = useState<TextBeeQuotaInfo | null>(null);
+
+  const refreshSmsQuota = useCallback(async () => {
+    const q = await fetchTextBeeQuota();
+    if (q) setSmsQuota(q);
+  }, []);
 
   // Local switch & Global Admin SMS switch
   const [sendSms, setSendSms] = useState(true);
@@ -168,6 +174,7 @@ export default function ScannerTerminal() {
       }
     }
     fetchSmsSetting()
+    refreshSmsQuota()
 
     // Realtime listener for immediate sync when Admin toggles SMS
     const channel = supabase
@@ -541,23 +548,28 @@ export default function ScannerTerminal() {
               section: sectionName,
               scanType: windowType.includes('out') ? 'TIME OUT' : 'TIME IN',
               scannedAt: scanTime,
-              parentPhone: student.parent_phone
+              parentPhone: student.parent_phone,
+              onStatusUpdate: (liveStatus) => {
+                setSmsStatus(liveStatus)
+              }
             })
             console.log('[SMS] Result:', smsResult)
             setSmsStatus(smsResult)
+            refreshSmsQuota()
 
             if (logData?.id) {
               const timeStr = scanTime.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
               const dateStr = scanTime.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+              const dbStatus = (smsResult === 'delivered' || smsResult === 'sent' || smsResult === 'queued') ? 'sent' : smsResult === 'no_phone' ? 'no_phone' : 'failed';
               await supabase.from('sms_logs').insert({
                 attendance_log_id: logData.id,
                 student_id: student.id,
                 parent_phone: formatPhilippinePhoneNumber(student.parent_phone) || student.parent_phone,
                 message_content: `[RTNHS Attendance] ${student.full_name} has ${windowType.includes('out') ? 'TIME OUT' : 'TIME IN'} at ${timeStr}. Date: ${dateStr} | ${sectionName}`,
-                status: smsResult
+                status: dbStatus
               });
             }
-            setTimeout(() => setSmsStatus('idle'), 5000)
+            setTimeout(() => setSmsStatus('idle'), 7000)
           } catch (smsErr) {
             console.error('[SMS] Send error:', smsErr)
             setSmsStatus('failed')
@@ -565,7 +577,7 @@ export default function ScannerTerminal() {
         })()
       }
     }
-  }, [students, scanWindow, debugMode, processDebugCode, sendSms, globalSmsEnabled, isHydrating, notifyEspScreen, sectionId, sectionName, windowType])
+  }, [students, scanWindow, debugMode, processDebugCode, sendSms, globalSmsEnabled, isHydrating, notifyEspScreen, sectionId, sectionName, windowType, refreshSmsQuota])
 
   const handleBatchAbsent = useCallback(async (windowId: string) => {
     const unscanned = students.filter(s => !scannedIds.has(s.id))
@@ -638,6 +650,28 @@ export default function ScannerTerminal() {
               <span className="text-white/40">•</span>
               <span className="text-emerald-400">{windowType.replace('_', ' ').toUpperCase()}</span>
             </div>
+
+            {/* Daily SMS Quota Monitor Pill */}
+            {smsQuota && (
+              <div
+                onClick={refreshSmsQuota}
+                title={`Monthly Usage: ${smsQuota.processedSmsLastMonth} / ${smsQuota.monthlyLimit} (Click to refresh)`}
+                className={`cursor-pointer px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-full text-xs font-semibold border flex items-center gap-2 shadow-lg transition-all ${
+                  smsQuota.processedSmsToday >= smsQuota.dailyLimit
+                    ? 'border-red-500/50 text-red-400'
+                    : smsQuota.processedSmsToday >= smsQuota.dailyLimit * 0.8
+                    ? 'border-amber-500/40 text-amber-300'
+                    : 'border-white/10 text-white/90'
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
+                <span>SMS Quota:</span>
+                <span className="font-mono font-bold">
+                  {smsQuota.processedSmsToday}/{smsQuota.dailyLimit}
+                </span>
+                <span className="text-[10px] text-white/50 hidden sm:inline">today</span>
+              </div>
+            )}
           </div>
           
           {/* SMS Blocked Global Alert */}
@@ -665,16 +699,27 @@ export default function ScannerTerminal() {
           {smsStatus !== 'idle' && (
             <div className={`px-3 py-1.5 backdrop-blur-md rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg border ${
               smsStatus === 'sending' ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' :
-              smsStatus === 'sent' ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' :
+              smsStatus === 'queued' ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300' :
+              smsStatus === 'sent' ? 'bg-teal-500/20 border-teal-500/30 text-teal-300' :
+              smsStatus === 'delivered' ? 'bg-emerald-500/25 border-emerald-500/40 text-emerald-300' :
+              smsStatus === 'quota_exceeded' ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' :
               smsStatus === 'failed' ? 'bg-red-500/20 border-red-500/30 text-red-400' :
               'bg-white/10 border-white/20 text-white/70'
             }`}>
-              {smsStatus === 'sending' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 
-               smsStatus === 'sent' ? <CheckCircle2 className="w-3.5 h-3.5" /> : 
-               smsStatus === 'failed' ? <XCircle className="w-3.5 h-3.5" /> : 
-               <Zap className="w-3.5 h-3.5" />}
-              {smsStatus === 'sending' ? 'Sending SMS...' :
-               smsStatus === 'sent' ? 'SMS Sent' :
+              {(smsStatus === 'sending' || smsStatus === 'queued' || smsStatus === 'sent') ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : smsStatus === 'delivered' ? (
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              ) : (smsStatus === 'failed' || smsStatus === 'quota_exceeded') ? (
+                <XCircle className="w-3.5 h-3.5" />
+              ) : (
+                <Zap className="w-3.5 h-3.5" />
+              )}
+              {smsStatus === 'sending' ? 'Sending to API...' :
+               smsStatus === 'queued' ? 'Sent via API (Waiting for Phone...)' :
+               smsStatus === 'sent' ? 'Dispatched by Phone (Confirming...)' :
+               smsStatus === 'delivered' ? 'SMS Delivered ✓' :
+               smsStatus === 'quota_exceeded' ? 'Daily SMS Quota Reached (50/50)' :
                smsStatus === 'failed' ? 'SMS Failed' : 'No Parent Phone'}
             </div>
           )}
