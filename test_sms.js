@@ -38,12 +38,12 @@ function formatPhilippinePhoneNumber(phone) {
   return cleaned;
 }
 
-const API_KEY = process.env.VITE_HTTPSMS_API_KEY;
-const SENDER_PHONE = process.env.VITE_HTTPSMS_SENDER_PHONE;
+const API_KEY = process.env.VITE_TEXTBEE_API_KEY;
+const DEVICE_ID = process.env.VITE_TEXTBEE_DEVICE_ID;
 
 async function sendTestMessage(to) {
-  if (!API_KEY || !SENDER_PHONE) {
-    console.error('Error: Missing API Key or Sender Phone in .env.local');
+  if (!API_KEY) {
+    console.error('Error: Missing VITE_TEXTBEE_API_KEY in .env.local');
     return;
   }
 
@@ -54,27 +54,29 @@ async function sendTestMessage(to) {
   }
 
   const formattedTo = formatPhilippinePhoneNumber(to);
-  console.log(`Sending test message to ${formattedTo} (original: ${to}) from ${SENDER_PHONE}...`);
+  const endpoint = DEVICE_ID
+    ? `https://api.textbee.dev/api/v1/gateway/devices/${DEVICE_ID.trim()}/send-sms`
+    : `https://api.textbee.dev/api/v1/gateway/send-sms`;
+
+  console.log(`Sending test message via TextBee.dev to ${formattedTo} (original: ${to})...`);
 
   try {
-    const response = await fetch('https://api.httpsms.com/v1/messages/send', {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        'x-api-key': API_KEY,
-        'Accept': 'application/json',
+        'x-api-key': API_KEY.trim(),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        content: 'This is a test message from the RTNHS QR Code Attendance System.',
-        from: SENDER_PHONE,
-        to: formattedTo
+        recipients: [formattedTo],
+        message: '[RTNHS Attendance] Test message from RTNHS QR Code Attendance System via TextBee.'
       })
     });
 
     const data = await response.json();
 
     if (response.ok) {
-      console.log('✅ Message sent successfully!');
+      console.log('✅ Message sent successfully via TextBee!');
       console.log('Response:', data);
     } else {
       console.error('❌ Failed to send message.');

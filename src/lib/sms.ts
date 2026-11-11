@@ -1,9 +1,5 @@
-import Client from 'httpsms';
-
-const SENDER_PHONE = import.meta.env.VITE_HTTPSMS_SENDER_PHONE as string;
-const API_KEY = import.meta.env.VITE_HTTPSMS_API_KEY as string;
-
-const smsClient = new Client(API_KEY);
+const TEXTBEE_API_KEY = (import.meta.env.VITE_TEXTBEE_API_KEY || '') as string;
+const TEXTBEE_DEVICE_ID = (import.meta.env.VITE_TEXTBEE_DEVICE_ID || '') as string;
 
 export type SmsResult = 'sent' | 'failed' | 'no_phone';
 
@@ -74,20 +70,25 @@ export function formatPhilippinePhoneNumber(phone: string | null | undefined): s
 }
 
 /**
- * Sends an SMS to the parent after a successful scan.
+ * Sends an SMS to the parent after a successful scan using TextBee.dev API.
  * Returns 'no_phone' if the student has no parent number on record.
  * Returns 'sent' on success, 'failed' on API error.
  */
 export async function sendAttendanceSms(payload: ScanSmsPayload): Promise<SmsResult> {
   console.log('[SMS] sendAttendanceSms called with:', payload);
-  console.log('[SMS] API KEY present:', !!import.meta.env.VITE_HTTPSMS_API_KEY);
-  console.log('[SMS] SENDER PHONE:', import.meta.env.VITE_HTTPSMS_SENDER_PHONE);
+  console.log('[SMS] TextBee API KEY present:', !!TEXTBEE_API_KEY);
+  console.log('[SMS] TextBee DEVICE ID:', TEXTBEE_DEVICE_ID || '(default online device)');
 
   const formattedPhone = formatPhilippinePhoneNumber(payload.parentPhone);
 
   if (!formattedPhone) {
     console.warn('[SMS] No valid phone number provided for student:', payload.studentName);
     return 'no_phone';
+  }
+
+  if (!TEXTBEE_API_KEY) {
+    console.error('[TextBee] Missing VITE_TEXTBEE_API_KEY environment variable.');
+    return 'failed';
   }
 
   console.log('[SMS] Target formatted phone:', formattedPhone, '(original:', payload.parentPhone, ')');
@@ -109,21 +110,34 @@ export async function sendAttendanceSms(payload: ScanSmsPayload): Promise<SmsRes
     `[RTNHS Attendance] ${payload.studentName} has ${payload.scanType} ` +
     `at ${time}. Date: ${date} | ${payload.section}`;
 
+  const endpoint = TEXTBEE_DEVICE_ID
+    ? `https://api.textbee.dev/api/v1/gateway/devices/${TEXTBEE_DEVICE_ID.trim()}/send-sms`
+    : `https://api.textbee.dev/api/v1/gateway/send-sms`;
+
   try {
-    const response = await smsClient.messages.postSend({
-      content,
-      from: SENDER_PHONE,
-      to: formattedPhone,
-      encrypted: false
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'x-api-key': TEXTBEE_API_KEY.trim(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        recipients: [formattedPhone],
+        message: content,
+      }),
     });
 
-    if (response && response.id) {
-      console.log('[SMS] Successfully queued/sent via httpSMS. Message ID:', response.id);
+    const data = await response.json().catch(() => null);
+
+    if (response.ok) {
+      console.log('[TextBee] Successfully queued/sent SMS:', data);
       return 'sent';
     }
+
+    console.error('[TextBee] API returned error:', response.status, data);
     return 'failed';
   } catch (error) {
-    console.error('[httpSMS] Failed to send SMS:', error);
+    console.error('[TextBee] Failed to send SMS:', error);
     return 'failed';
   }
 }

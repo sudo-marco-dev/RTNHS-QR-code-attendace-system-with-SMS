@@ -199,11 +199,11 @@ export default function SystemSettings() {
           <div className="space-y-2 text-xs">
             <div className="flex justify-between py-1 border-b border-[var(--card-border)]">
               <span className="text-[var(--sidebar-muted)]">Provider</span>
-              <span className="font-semibold text-[var(--body-text)]">httpSMS API</span>
+              <span className="font-semibold text-[var(--body-text)]">TextBee.dev API</span>
             </div>
             <div className="flex justify-between py-1 border-b border-[var(--card-border)]">
-              <span className="text-[var(--sidebar-muted)]">Sender Phone</span>
-              <span className="font-mono font-semibold text-[var(--body-text)]">+63 994 915 9434</span>
+              <span className="text-[var(--sidebar-muted)]">Gateway Device</span>
+              <span className="font-mono font-semibold text-[var(--body-text)]">{import.meta.env.VITE_TEXTBEE_DEVICE_ID || 'Active Android Gateway'}</span>
             </div>
             <div className="flex justify-between py-1">
               <span className="text-[var(--sidebar-muted)]">Target Log Table</span>
