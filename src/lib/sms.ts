@@ -21,6 +21,12 @@ export interface TextBeeQuotaInfo {
   isActive: boolean;
 }
 
+export interface DirectSmsResult {
+  status: SmsResult;
+  batchId?: string;
+  errorMessage?: string;
+}
+
 /**
  * Fetches live daily & monthly SMS quota usage from TextBee.dev billing API.
  */
@@ -174,44 +180,22 @@ export function formatPhilippinePhoneNumber(phone: string | null | undefined): s
 }
 
 /**
- * Sends an SMS to the parent after a successful scan using TextBee.dev API,
- * and polls the device to confirm actual carrier delivery.
+ * Direct SMS dispatch using TextBee API.
  */
-export async function sendAttendanceSms(payload: ScanSmsPayload): Promise<SmsResult> {
-  console.log('[SMS] sendAttendanceSms called with:', payload);
-  console.log('[SMS] TextBee API KEY present:', !!TEXTBEE_API_KEY);
-  console.log('[SMS] TextBee DEVICE ID:', TEXTBEE_DEVICE_ID || '(default online device)');
-
-  const formattedPhone = formatPhilippinePhoneNumber(payload.parentPhone);
+export async function sendDirectSms(
+  phone: string | null | undefined,
+  content: string,
+  onStatusUpdate?: (status: SmsResult) => void
+): Promise<DirectSmsResult> {
+  const formattedPhone = formatPhilippinePhoneNumber(phone);
 
   if (!formattedPhone) {
-    console.warn('[SMS] No valid phone number provided for student:', payload.studentName);
-    return 'no_phone';
+    return { status: 'no_phone', errorMessage: 'Invalid or missing phone number' };
   }
 
   if (!TEXTBEE_API_KEY) {
-    console.error('[TextBee] Missing VITE_TEXTBEE_API_KEY environment variable.');
-    return 'failed';
+    return { status: 'failed', errorMessage: 'Missing VITE_TEXTBEE_API_KEY' };
   }
-
-  console.log('[SMS] Target formatted phone:', formattedPhone, '(original:', payload.parentPhone, ')');
-
-  const time = payload.scannedAt.toLocaleTimeString('en-PH', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  });
-
-  const date = payload.scannedAt.toLocaleDateString('en-PH', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-
-  // Keep under 160 chars to avoid double SMS credit usage
-  const content =
-    `[RTNHS Attendance] ${payload.studentName} has ${payload.scanType} ` +
-    `at ${time}. Date: ${date} | ${payload.section}`;
 
   const endpoint = TEXTBEE_DEVICE_ID
     ? `https://api.textbee.dev/api/v1/gateway/devices/${TEXTBEE_DEVICE_ID.trim()}/send-sms`
@@ -233,29 +217,59 @@ export async function sendAttendanceSms(payload: ScanSmsPayload): Promise<SmsRes
     const data = await response.json().catch(() => null);
 
     if (response.status === 429 || (data?.message && String(data.message).toLowerCase().includes('limit'))) {
-      console.warn('[TextBee] Daily/Plan SMS quota reached:', data);
-      payload.onStatusUpdate?.('quota_exceeded');
-      return 'quota_exceeded';
+      onStatusUpdate?.('quota_exceeded');
+      return { status: 'quota_exceeded', errorMessage: data?.message || 'Daily SMS quota reached' };
     }
 
     if (response.ok) {
       const smsBatchId = data?.data?.smsBatchId;
-      console.log('[TextBee] Sent to API queue. Batch ID:', smsBatchId);
-      payload.onStatusUpdate?.('queued');
+      onStatusUpdate?.('queued');
 
       if (smsBatchId && TEXTBEE_DEVICE_ID) {
-        const finalDeliveryStatus = await pollTextBeeDeliveryStatus(smsBatchId, payload.onStatusUpdate);
-        console.log('[TextBee] Final delivery status for batch', smsBatchId, ':', finalDeliveryStatus);
-        return finalDeliveryStatus;
+        const finalStatus = await pollTextBeeDeliveryStatus(smsBatchId, onStatusUpdate);
+        return { status: finalStatus, batchId: smsBatchId };
       }
 
-      return 'queued';
+      return { status: 'queued', batchId: smsBatchId };
     }
 
-    console.error('[TextBee] API returned error:', response.status, data);
-    return 'failed';
-  } catch (error) {
-    console.error('[TextBee] Failed to send SMS:', error);
-    return 'failed';
+    const err = data?.message || data?.error || `HTTP ${response.status}`;
+    return { status: 'failed', errorMessage: err };
+  } catch (error: any) {
+    return { status: 'failed', errorMessage: error?.message || 'Network error' };
   }
+}
+
+/**
+ * Sends an SMS to the parent after a successful scan using TextBee.dev API,
+ * and polls the device to confirm actual carrier delivery.
+ */
+export async function sendAttendanceSms(payload: ScanSmsPayload): Promise<SmsResult> {
+  console.log('[SMS] sendAttendanceSms called with:', payload);
+
+  const formattedPhone = formatPhilippinePhoneNumber(payload.parentPhone);
+  if (!formattedPhone) {
+    console.warn('[SMS] No valid phone number provided for student:', payload.studentName);
+    return 'no_phone';
+  }
+
+  const time = payload.scannedAt.toLocaleTimeString('en-PH', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  const date = payload.scannedAt.toLocaleDateString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  // Keep under 160 chars to avoid double SMS credit usage
+  const content =
+    `[RTNHS Attendance] ${payload.studentName} has ${payload.scanType} ` +
+    `at ${time}. Date: ${date} | ${payload.section}`;
+
+  const res = await sendDirectSms(formattedPhone, content, payload.onStatusUpdate);
+  return res.status;
 }
