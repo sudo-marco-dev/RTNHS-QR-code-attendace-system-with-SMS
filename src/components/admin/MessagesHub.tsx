@@ -25,7 +25,8 @@ import {
   Eye,
   Megaphone,
   History,
-  Info
+  Info,
+  X
 } from 'lucide-react'
 
 interface Section {
@@ -118,6 +119,11 @@ export default function MessagesHub() {
   const [isSending, setIsSending] = useState<boolean>(false)
   const [sendProgress, setSendProgress] = useState<{ current: number; total: number; success: number; failed: number; queued: number } | null>(null)
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
+
+  // In-app Modals (replacing browser native dialogs)
+  const [broadcastModalOpen, setBroadcastModalOpen] = useState<boolean>(false)
+  const [deleteTargetLogId, setDeleteTargetLogId] = useState<string | null>(null)
+  const [dispatchQueuedModalOpen, setDispatchQueuedModalOpen] = useState<boolean>(false)
 
   // Logs state
   const [logs, setLogs] = useState<SmsLogEntry[]>([])
@@ -255,6 +261,18 @@ export default function MessagesHub() {
     })
   }, [students, selectedGrade, selectedSection, studentSearch])
 
+  // Pinned selected students at top, secondary sort alphabetical
+  const displayedStudents = useMemo(() => {
+    return [...filteredStudents].sort((a, b) => {
+      const aSel = selectedStudentIds.has(a.id) ? 1 : 0
+      const bSel = selectedStudentIds.has(b.id) ? 1 : 0
+      if (aSel !== bSel) {
+        return bSel - aSel // 1 comes before 0, pinning selected students to top
+      }
+      return a.full_name.localeCompare(b.full_name)
+    })
+  }, [filteredStudents, selectedStudentIds])
+
   // Stats for current selection
   const selectionStats = useMemo(() => {
     const selectedStudentsList = filteredStudents.filter(s => selectedStudentIds.has(s.id))
@@ -319,8 +337,8 @@ export default function MessagesHub() {
   const charCount = messageContent.length
   const smsSegments = Math.ceil(charCount / 160) || 1
 
-  // Handle Send Broadcast
-  const handleSendBroadcast = async () => {
+  // Open Broadcast Confirmation Modal
+  const handleOpenBroadcastModal = () => {
     if (!messageContent.trim()) {
       setFeedback({ type: 'error', text: 'Please write a message or select a template before sending.' })
       return
@@ -332,12 +350,13 @@ export default function MessagesHub() {
       return
     }
 
-    const { remainingQuota, sendTodayCount, queueTomorrowCount } = selectionStats
-    const confirmText = queueTomorrowCount > 0
-      ? `You are sending to ${recipients.length} parents. Since TextBee's remaining daily quota is ${remainingQuota}, ${sendTodayCount} will be sent now, and ${queueTomorrowCount} will be safely queued for tomorrow's reset. Proceed?`
-      : `Send announcement to ${sendTodayCount} parent(s) now?`
+    setBroadcastModalOpen(true)
+  }
 
-    if (!window.confirm(confirmText)) return
+  // Execute Send Broadcast
+  const executeSendBroadcast = async () => {
+    const recipients = selectionStats.validStudentsList
+    const { sendTodayCount } = selectionStats
 
     setIsSending(true)
     setFeedback(null)
@@ -451,37 +470,48 @@ export default function MessagesHub() {
 
       await fetchLogs()
       await refreshQuota()
+      setFeedback({ type: 'success', text: `Message retry finished with status: ${newStatus}` })
     } catch (err: any) {
       console.error('[MESSAGES] Retry failed:', err)
+      setFeedback({ type: 'error', text: 'Message retry failed.' })
     } finally {
       setRetryingLogId(null)
     }
   }
 
-  // Delete log entry
-  const handleDeleteLog = async (id: string) => {
-    if (!window.confirm('Delete this SMS log record?')) return
+  // Execute delete log
+  const executeDeleteLog = async (id: string) => {
     try {
       await supabase.from('sms_logs').delete().eq('id', id)
       setLogs(prev => prev.filter(l => l.id !== id))
+      setFeedback({ type: 'info', text: 'SMS delivery record deleted.' })
     } catch (err: any) {
       console.error('[MESSAGES] Delete log failed:', err)
+      setFeedback({ type: 'error', text: 'Failed to delete SMS delivery record.' })
     }
   }
 
   // Dispatch all queued logs
-  const handleDispatchQueued = async () => {
+  const handlePromptDispatchQueued = () => {
     const queuedLogs = logs.filter(l => l.status === 'queued')
     if (queuedLogs.length === 0) return
 
     const remaining = quota ? Math.max(0, quota.dailyLimit - quota.processedSmsToday) : 50
     if (remaining <= 0) {
-      alert("Today's SMS quota has already been reached. Please wait for the daily quota reset or check your TextBee dashboard.")
+      setFeedback({
+        type: 'error',
+        text: "Today's SMS quota has already been reached. Please wait for the daily quota reset or check your TextBee dashboard."
+      })
       return
     }
 
+    setDispatchQueuedModalOpen(true)
+  }
+
+  const executeDispatchQueued = async () => {
+    const queuedLogs = logs.filter(l => l.status === 'queued')
+    const remaining = quota ? Math.max(0, quota.dailyLimit - quota.processedSmsToday) : 50
     const batch = queuedLogs.slice(0, remaining)
-    if (!window.confirm(`Dispatch ${batch.length} queued messages now? (${remaining} slots available today)`)) return
 
     setLoadingLogs(true)
     for (const log of batch) {
@@ -504,6 +534,7 @@ export default function MessagesHub() {
     await fetchLogs()
     await refreshQuota()
     setLoadingLogs(false)
+    setFeedback({ type: 'success', text: `Successfully dispatched ${batch.length} queued messages!` })
   }
 
   // Filter logs
@@ -535,7 +566,7 @@ export default function MessagesHub() {
   // Export to CSV
   const handleExportCsv = () => {
     if (filteredLogs.length === 0) {
-      alert('No logs available to export.')
+      setFeedback({ type: 'info', text: 'No logs available to export for the selected filter.' })
       return
     }
 
@@ -562,40 +593,44 @@ export default function MessagesHub() {
   }
 
   const queuedCountInLogs = logs.filter(l => l.status === 'queued').length
+  const queuedBatchCount = Math.min(
+    queuedCountInLogs,
+    quota ? Math.max(0, quota.dailyLimit - quota.processedSmsToday) : 50
+  )
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* 1. Header & Live Quota Card */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[var(--card-border)]">
         <div>
-          <h2 className="text-xl font-bold text-[var(--body-text)] flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-[var(--primary)]" />
+          <h2 className="text-xl font-bold text-gray-900 dark:text-emerald-100 flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             Messages & Broadcasts Hub
           </h2>
-          <p className="text-xs sm:text-sm text-[var(--sidebar-muted)] mt-1">
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-emerald-200/70 mt-1">
             Disseminate school announcements, manage bulk SMS, and audit real-time carrier delivery receipts.
           </p>
         </div>
 
         {/* Live Quota Pill */}
         <div className="flex items-center gap-2 bg-[var(--row-alt)] border border-[var(--card-border)] p-2.5 px-4 rounded-xl shadow-sm text-xs">
-          <Smartphone className="w-4 h-4 text-cyan-500" />
+          <Smartphone className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
           <div>
-            <div className="flex items-center gap-1.5 font-semibold text-[var(--body-text)]">
+            <div className="flex items-center gap-1.5 font-semibold text-gray-900 dark:text-emerald-100">
               <span>TextBee Quota:</span>
-              <span className="font-mono text-cyan-500">
+              <span className="font-mono text-cyan-600 dark:text-cyan-400 font-bold">
                 {quota ? `${quota.processedSmsToday} / ${quota.dailyLimit}` : 'Loading...'}
               </span>
-              <span className="text-[10px] text-[var(--sidebar-muted)]">today</span>
+              <span className="text-[10px] text-gray-500 dark:text-emerald-300/70">today</span>
             </div>
-            <div className="text-[10px] text-[var(--sidebar-muted)]">
+            <div className="text-[10px] text-gray-500 dark:text-emerald-300/70">
               {quota ? `${Math.max(0, quota.dailyLimit - quota.processedSmsToday)} credits remaining today` : 'Checking quota...'}
             </div>
           </div>
           <button
             onClick={refreshQuota}
             disabled={loadingQuota}
-            className="ml-2 p-1.5 text-[var(--sidebar-muted)] hover:text-[var(--body-text)] hover:bg-[var(--card-border)] rounded-lg transition-all"
+            className="ml-2 p-1.5 text-gray-500 dark:text-emerald-300 hover:text-gray-900 dark:hover:text-emerald-100 hover:bg-[var(--card-border)] rounded-lg transition-all"
             title="Refresh Quota"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingQuota ? 'animate-spin' : ''}`} />
@@ -607,13 +642,13 @@ export default function MessagesHub() {
       {feedback && (
         <div className={`p-4 rounded-xl border flex items-center gap-3 text-sm animate-in fade-in ${
           feedback.type === 'success'
-            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
             : feedback.type === 'info'
-            ? 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400'
-            : 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+            ? 'bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300'
+            : 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-300'
         }`}>
           {feedback.type === 'success' ? <Check className="w-5 h-5 shrink-0" /> : <AlertTriangle className="w-5 h-5 shrink-0" />}
-          <span className="flex-1">{feedback.text}</span>
+          <span className="flex-1 font-medium">{feedback.text}</span>
           <button onClick={() => setFeedback(null)} className="text-xs font-semibold opacity-70 hover:opacity-100">✕</button>
         </div>
       )}
@@ -622,10 +657,10 @@ export default function MessagesHub() {
       <div className="flex items-center gap-3 border-b border-[var(--card-border)] pb-2 text-sm font-semibold">
         <button
           onClick={() => setActiveTab('compose')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all ${
             activeTab === 'compose'
-              ? 'bg-[var(--primary)] text-white shadow-sm'
-              : 'text-[var(--sidebar-muted)] hover:text-[var(--body-text)] hover:bg-[var(--row-alt)]'
+              ? 'bg-emerald-700 dark:bg-emerald-600 text-white shadow-sm'
+              : 'text-gray-600 dark:text-emerald-200/70 hover:text-gray-900 dark:hover:text-emerald-100 hover:bg-[var(--row-alt)]'
           }`}
         >
           <Megaphone className="w-4 h-4" />
@@ -634,10 +669,10 @@ export default function MessagesHub() {
 
         <button
           onClick={() => setActiveTab('logs')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all relative ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all relative ${
             activeTab === 'logs'
-              ? 'bg-[var(--primary)] text-white shadow-sm'
-              : 'text-[var(--sidebar-muted)] hover:text-[var(--body-text)] hover:bg-[var(--row-alt)]'
+              ? 'bg-emerald-700 dark:bg-emerald-600 text-white shadow-sm'
+              : 'text-gray-600 dark:text-emerald-200/70 hover:text-gray-900 dark:hover:text-emerald-100 hover:bg-[var(--row-alt)]'
           }`}
         >
           <History className="w-4 h-4" />
@@ -655,10 +690,10 @@ export default function MessagesHub() {
         <div className="space-y-6">
           {/* Top Info Banner for Quota */}
           {selectionStats.exceedsQuota && (
-            <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start gap-3 text-xs text-amber-700 dark:text-amber-300">
-              <Info className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="p-4 bg-amber-500/15 border border-amber-500/30 rounded-2xl flex items-start gap-3 text-xs text-amber-900 dark:text-amber-200">
+              <Info className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <div className="font-bold text-sm">Smart 50-SMS Quota Management Active</div>
+                <div className="font-bold text-sm text-amber-900 dark:text-amber-100">Smart 50-SMS Quota Management Active</div>
                 <p className="leading-relaxed">
                   You have selected <strong className="font-semibold">{selectionStats.validPhoneCount} recipients</strong>, but TextBee has <strong className="font-semibold">{selectionStats.remainingQuota} credits remaining today</strong>.
                   The system will automatically dispatch <strong className="font-semibold">{selectionStats.sendTodayCount} messages now</strong>, and place the remaining <strong className="font-semibold">{selectionStats.queueTomorrowCount} recipients into the queue</strong> ready for 1-click dispatch tomorrow.
@@ -671,12 +706,12 @@ export default function MessagesHub() {
             {/* Left Column: Filter & Recipient Selector (7 cols) */}
             <div className="lg:col-span-7 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-5 shadow-sm space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-[var(--card-border)]">
-                <div className="flex items-center gap-2 font-bold text-sm text-[var(--body-text)]">
-                  <Users className="w-4 h-4 text-[var(--primary)]" />
+                <div className="flex items-center gap-2 font-bold text-sm text-gray-900 dark:text-emerald-100">
+                  <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   Select Target Recipients
                 </div>
-                <div className="text-xs text-[var(--sidebar-muted)]">
-                  <span className="font-bold text-[var(--primary)]">{selectionStats.selectedCount}</span> of {selectionStats.totalFiltered} selected
+                <div className="text-xs text-gray-600 dark:text-emerald-200/80">
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">{selectionStats.selectedCount}</span> of {selectionStats.totalFiltered} selected
                 </div>
               </div>
 
@@ -684,7 +719,7 @@ export default function MessagesHub() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
                 {/* Grade Level Filter */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[var(--sidebar-muted)] mb-1">
+                  <label className="block text-[11px] font-semibold text-gray-700 dark:text-emerald-200 mb-1.5">
                     Grade Level
                   </label>
                   <select
@@ -693,7 +728,7 @@ export default function MessagesHub() {
                       setSelectedGrade(e.target.value)
                       setSelectedSection('all')
                     }}
-                    className="w-full p-2 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-[var(--body-text)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                    className="w-full p-2 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-gray-900 dark:text-emerald-100 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   >
                     <option value="all">All Grade Levels</option>
                     {gradeLevels.map(g => (
@@ -704,13 +739,13 @@ export default function MessagesHub() {
 
                 {/* Section Filter */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[var(--sidebar-muted)] mb-1">
+                  <label className="block text-[11px] font-semibold text-gray-700 dark:text-emerald-200 mb-1.5">
                     Section
                   </label>
                   <select
                     value={selectedSection}
                     onChange={(e) => setSelectedSection(e.target.value)}
-                    className="w-full p-2 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-[var(--body-text)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                    className="w-full p-2 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-gray-900 dark:text-emerald-100 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   >
                     <option value="all">All Sections ({filteredSections.length})</option>
                     {filteredSections.map(s => (
@@ -723,17 +758,17 @@ export default function MessagesHub() {
 
                 {/* Search */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[var(--sidebar-muted)] mb-1">
+                  <label className="block text-[11px] font-semibold text-gray-700 dark:text-emerald-200 mb-1.5">
                     Search Student / LRN
                   </label>
                   <div className="relative">
-                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[var(--sidebar-muted)]" />
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-emerald-300/50 pointer-events-none" />
                     <input
                       type="text"
                       placeholder="Name, LRN, phone..."
                       value={studentSearch}
                       onChange={(e) => setStudentSearch(e.target.value)}
-                      className="w-full pl-8 pr-2.5 py-1.5 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-[var(--body-text)] placeholder-[var(--sidebar-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] text-xs"
+                      className="w-full pl-9 pr-3 py-2 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-xs text-gray-900 dark:text-emerald-100 placeholder:text-gray-400 dark:placeholder:text-emerald-300/40 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     />
                   </div>
                 </div>
@@ -744,19 +779,19 @@ export default function MessagesHub() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleSelectAllFiltered}
-                    className="px-2.5 py-1 bg-[var(--row-alt)] hover:bg-[var(--card-border)] rounded-md font-medium text-[var(--body-text)] transition-all"
+                    className="px-2.5 py-1 bg-[var(--row-alt)] hover:bg-emerald-500/10 border border-[var(--card-border)] rounded-md font-medium text-gray-800 dark:text-emerald-100 transition-all"
                   >
                     Select All in Filter
                   </button>
                   <button
                     onClick={handleDeselectAllFiltered}
-                    className="px-2.5 py-1 bg-[var(--row-alt)] hover:bg-[var(--card-border)] rounded-md font-medium text-[var(--sidebar-muted)] hover:text-[var(--body-text)] transition-all"
+                    className="px-2.5 py-1 bg-[var(--row-alt)] hover:bg-[var(--card-border)] border border-[var(--card-border)] rounded-md font-medium text-gray-600 dark:text-emerald-300 hover:text-gray-900 dark:hover:text-emerald-100 transition-all"
                   >
                     Deselect All
                   </button>
                 </div>
 
-                <div className="text-[11px] text-[var(--sidebar-muted)]">
+                <div className="text-[11px] text-gray-600 dark:text-emerald-200/80 font-medium">
                   {selectionStats.validPhoneCount} have valid numbers
                 </div>
               </div>
@@ -764,24 +799,24 @@ export default function MessagesHub() {
               {/* Student Checklist Table */}
               <div className="border border-[var(--card-border)] rounded-xl overflow-hidden max-h-80 overflow-y-auto">
                 {loadingStudents ? (
-                  <div className="p-8 text-center text-xs text-[var(--sidebar-muted)] flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-[var(--primary)]" />
+                  <div className="p-8 text-center text-xs text-gray-600 dark:text-emerald-200/70 flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600 dark:text-emerald-400" />
                     Loading students...
                   </div>
-                ) : filteredStudents.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-[var(--sidebar-muted)]">
+                ) : displayedStudents.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-gray-600 dark:text-emerald-200/70">
                     No students match the selected filter.
                   </div>
                 ) : (
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-[var(--row-alt)] border-b border-[var(--card-border)] text-[var(--sidebar-muted)] sticky top-0 z-10">
+                    <thead className="bg-[var(--row-alt)] border-b border-[var(--card-border)] text-gray-700 dark:text-emerald-200/90 sticky top-0 z-10">
                       <tr>
                         <th className="p-2.5 w-8">
                           <input
                             type="checkbox"
                             checked={filteredStudents.length > 0 && filteredStudents.every(s => selectedStudentIds.has(s.id))}
                             onChange={(e) => e.target.checked ? handleSelectAllFiltered() : handleDeselectAllFiltered()}
-                            className="rounded text-[var(--primary)] focus:ring-0 cursor-pointer"
+                            className="rounded text-emerald-600 focus:ring-0 cursor-pointer"
                           />
                         </th>
                         <th className="p-2.5 font-semibold">Student Name</th>
@@ -790,7 +825,7 @@ export default function MessagesHub() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--card-border)]">
-                      {filteredStudents.map(student => {
+                      {displayedStudents.map(student => {
                         const formatted = formatPhilippinePhoneNumber(student.parent_phone)
                         const isSelected = selectedStudentIds.has(student.id)
                         const hasPhone = !!formatted
@@ -799,8 +834,12 @@ export default function MessagesHub() {
                           <tr
                             key={student.id}
                             onClick={() => hasPhone && handleToggleStudent(student.id)}
-                            className={`hover:bg-[var(--row-alt)] cursor-pointer transition-colors ${
-                              !hasPhone ? 'opacity-40 cursor-not-allowed bg-red-500/5' : isSelected ? 'bg-[var(--primary)]/5' : ''
+                            className={`cursor-pointer transition-colors ${
+                              !hasPhone
+                                ? 'opacity-40 cursor-not-allowed bg-red-500/5'
+                                : isSelected
+                                ? 'bg-emerald-500/10 dark:bg-emerald-500/20 font-medium'
+                                : 'hover:bg-[var(--row-alt)]'
                             }`}
                           >
                             <td className="p-2.5">
@@ -810,18 +849,25 @@ export default function MessagesHub() {
                                 checked={isSelected}
                                 onChange={() => handleToggleStudent(student.id)}
                                 onClick={(e) => e.stopPropagation()}
-                                className="rounded text-[var(--primary)] focus:ring-0 cursor-pointer"
+                                className="rounded text-emerald-600 focus:ring-0 cursor-pointer"
                               />
                             </td>
-                            <td className="p-2.5 font-medium text-[var(--body-text)]">
-                              {student.full_name}
+                            <td className="p-2.5 text-gray-900 dark:text-emerald-100 font-medium">
+                              <div className="flex items-center gap-1.5">
+                                <span>{student.full_name}</span>
+                                {isSelected && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-600/20 dark:bg-emerald-400/20 text-emerald-700 dark:text-emerald-300 font-semibold uppercase tracking-wider">
+                                    Selected
+                                  </span>
+                                )}
+                              </div>
                             </td>
-                            <td className="p-2.5 text-[var(--sidebar-muted)]">
+                            <td className="p-2.5 text-gray-600 dark:text-emerald-200/70">
                               {student.sections?.grade_level} - {student.sections?.name}
                             </td>
                             <td className="p-2.5 font-mono text-[11px]">
                               {formatted ? (
-                                <span className="text-emerald-600 dark:text-emerald-400">{formatted}</span>
+                                <span className="text-emerald-700 dark:text-emerald-300 font-medium">{formatted}</span>
                               ) : (
                                 <span className="text-red-500 font-sans italic">No phone</span>
                               )}
@@ -839,24 +885,24 @@ export default function MessagesHub() {
             <div className="lg:col-span-5 space-y-4">
               <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-5 shadow-sm space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-[var(--card-border)]">
-                  <div className="font-bold text-sm text-[var(--body-text)] flex items-center gap-2">
-                    <Megaphone className="w-4 h-4 text-emerald-500" />
+                  <div className="font-bold text-sm text-gray-900 dark:text-emerald-100 flex items-center gap-2">
+                    <Megaphone className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     Compose Announcement
                   </div>
-                  <div className="text-xs text-[var(--sidebar-muted)]">
+                  <div className="text-xs text-gray-600 dark:text-emerald-200/80 font-mono">
                     {charCount} / 160 chars ({smsSegments} SMS)
                   </div>
                 </div>
 
                 {/* Preset Templates Dropdown */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[var(--sidebar-muted)] mb-1">
+                  <label className="block text-[11px] font-semibold text-gray-700 dark:text-emerald-200 mb-1.5">
                     Quick Announcement Preset
                   </label>
                   <select
                     value={selectedTemplateIndex}
                     onChange={(e) => handleTemplateChange(Number(e.target.value))}
-                    className="w-full p-2 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-xs text-[var(--body-text)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                    className="w-full p-2 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-xs text-gray-900 dark:text-emerald-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   >
                     {PRESET_TEMPLATES.map((tmpl, idx) => (
                       <option key={idx} value={idx}>{tmpl.label}</option>
@@ -866,11 +912,11 @@ export default function MessagesHub() {
 
                 {/* Message Textarea */}
                 <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="text-[11px] font-medium text-[var(--sidebar-muted)]">
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-[11px] font-semibold text-gray-700 dark:text-emerald-200">
                       Message Content
                     </label>
-                    <div className="text-[10px] text-cyan-500">
+                    <div className="text-[10px] text-cyan-700 dark:text-cyan-300 font-mono">
                       Placeholders: <code className="bg-[var(--row-alt)] px-1 rounded">{'{student_name}'}</code>, <code className="bg-[var(--row-alt)] px-1 rounded">{'{section}'}</code>
                     </div>
                   </div>
@@ -879,17 +925,17 @@ export default function MessagesHub() {
                     value={messageContent}
                     onChange={(e) => setMessageContent(e.target.value)}
                     placeholder="Enter school announcement to parents..."
-                    className="w-full p-3 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-xl text-xs text-[var(--body-text)] placeholder-[var(--sidebar-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] leading-relaxed resize-none"
+                    className="w-full p-3 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-xl text-xs text-gray-900 dark:text-emerald-100 placeholder:text-gray-400 dark:placeholder:text-emerald-300/40 focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed resize-none"
                   />
                 </div>
 
                 {/* Live Message Preview Card */}
-                <div className="p-3.5 bg-black/40 border border-white/10 rounded-xl space-y-1.5">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-white/50 flex items-center gap-1.5">
-                    <Eye className="w-3 h-3 text-cyan-400" />
+                <div className="p-3.5 bg-emerald-950/5 dark:bg-black/40 border border-emerald-900/10 dark:border-white/10 rounded-xl space-y-1.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300/80 flex items-center gap-1.5">
+                    <Eye className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
                     Parent SMS Preview
                   </div>
-                  <p className="text-xs text-white/90 font-mono leading-relaxed bg-black/50 p-2.5 rounded-lg border border-white/5">
+                  <p className="text-xs text-gray-900 dark:text-emerald-100 font-mono leading-relaxed bg-white/90 dark:bg-black/60 p-3 rounded-lg border border-emerald-900/10 dark:border-white/10 shadow-sm">
                     {previewSampleMessage}
                   </p>
                 </div>
@@ -897,9 +943,9 @@ export default function MessagesHub() {
                 {/* Progress Bar during active send */}
                 {isSending && sendProgress && (
                   <div className="p-3.5 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-xl space-y-2 animate-in fade-in">
-                    <div className="flex justify-between text-xs font-semibold">
+                    <div className="flex justify-between text-xs font-semibold text-gray-900 dark:text-emerald-100">
                       <span className="flex items-center gap-2">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--primary)]" />
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 dark:text-emerald-400" />
                         Dispatching messages...
                       </span>
                       <span>{sendProgress.current} / {sendProgress.total}</span>
@@ -910,21 +956,21 @@ export default function MessagesHub() {
                         style={{ width: `${Math.round((sendProgress.current / sendProgress.total) * 100)}%` }}
                       />
                     </div>
-                    <div className="flex justify-between text-[11px] text-[var(--sidebar-muted)]">
-                      <span className="text-emerald-500">✓ {sendProgress.success} sent</span>
-                      {sendProgress.queued > 0 && <span className="text-amber-500">⏳ {sendProgress.queued} queued</span>}
-                      {sendProgress.failed > 0 && <span className="text-red-500">✕ {sendProgress.failed} failed</span>}
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">✓ {sendProgress.success} sent</span>
+                      {sendProgress.queued > 0 && <span className="text-amber-600 dark:text-amber-400 font-semibold">⏳ {sendProgress.queued} queued</span>}
+                      {sendProgress.failed > 0 && <span className="text-red-600 dark:text-red-400 font-semibold">✕ {sendProgress.failed} failed</span>}
                     </div>
                   </div>
                 )}
 
                 {/* Dispatch Button */}
                 <button
-                  onClick={handleSendBroadcast}
+                  onClick={handleOpenBroadcastModal}
                   disabled={isSending || selectionStats.validPhoneCount === 0 || !messageContent.trim()}
                   className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all active:scale-[0.98] ${
                     isSending || selectionStats.validPhoneCount === 0 || !messageContent.trim()
-                      ? 'bg-gray-500/30 text-gray-400 cursor-not-allowed'
+                      ? 'bg-gray-500/20 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                       : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/20'
                   }`}
                 >
@@ -959,13 +1005,13 @@ export default function MessagesHub() {
             <div className="flex flex-wrap items-center gap-2 flex-1">
               {/* Search */}
               <div className="relative min-w-[200px] flex-1 max-w-xs">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[var(--sidebar-muted)]" />
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-emerald-300/50 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search student, phone, text..."
                   value={logSearch}
                   onChange={(e) => setLogSearch(e.target.value)}
-                  className="w-full pl-8 pr-2.5 py-1.5 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-xs text-[var(--body-text)] placeholder-[var(--sidebar-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                  className="w-full pl-9 pr-3 py-2 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-xs text-gray-900 dark:text-emerald-100 placeholder:text-gray-400 dark:placeholder:text-emerald-300/40 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
 
@@ -973,7 +1019,7 @@ export default function MessagesHub() {
               <select
                 value={logStatusFilter}
                 onChange={(e) => setLogStatusFilter(e.target.value)}
-                className="p-1.5 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-xs text-[var(--body-text)] focus:outline-none"
+                className="p-2 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-xs text-gray-900 dark:text-emerald-100 focus:outline-none"
               >
                 <option value="all">All Statuses</option>
                 <option value="delivered">Delivered ✓</option>
@@ -986,7 +1032,7 @@ export default function MessagesHub() {
               <select
                 value={logTypeFilter}
                 onChange={(e) => setLogTypeFilter(e.target.value)}
-                className="p-1.5 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-xs text-[var(--body-text)] focus:outline-none"
+                className="p-2 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-lg text-xs text-gray-900 dark:text-emerald-100 focus:outline-none"
               >
                 <option value="all">All Types</option>
                 <option value="attendance">Attendance Scans</option>
@@ -998,7 +1044,7 @@ export default function MessagesHub() {
             <div className="flex items-center gap-2 shrink-0">
               {queuedCountInLogs > 0 && (
                 <button
-                  onClick={handleDispatchQueued}
+                  onClick={handlePromptDispatchQueued}
                   disabled={loadingLogs}
                   className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-lg flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
                   title="Dispatch queued messages waiting for quota reset"
@@ -1010,7 +1056,7 @@ export default function MessagesHub() {
 
               <button
                 onClick={handleExportCsv}
-                className="px-3 py-1.5 bg-[var(--row-alt)] hover:bg-[var(--card-border)] text-[var(--body-text)] font-semibold text-xs rounded-lg flex items-center gap-1.5 transition-all active:scale-95 border border-[var(--card-border)]"
+                className="px-3 py-1.5 bg-[var(--row-alt)] hover:bg-[var(--card-border)] text-gray-800 dark:text-emerald-100 font-semibold text-xs rounded-lg flex items-center gap-1.5 transition-all active:scale-95 border border-[var(--card-border)]"
                 title="Export filtered logs to CSV"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -1020,7 +1066,7 @@ export default function MessagesHub() {
               <button
                 onClick={fetchLogs}
                 disabled={loadingLogs}
-                className="p-2 bg-[var(--row-alt)] hover:bg-[var(--card-border)] text-[var(--body-text)] rounded-lg transition-all"
+                className="p-2 bg-[var(--row-alt)] hover:bg-[var(--card-border)] text-gray-800 dark:text-emerald-100 rounded-lg transition-all"
                 title="Refresh Logs"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs ? 'animate-spin' : ''}`} />
@@ -1031,17 +1077,17 @@ export default function MessagesHub() {
           {/* Logs Table */}
           <div className="border border-[var(--card-border)] rounded-xl overflow-hidden overflow-x-auto">
             {loadingLogs ? (
-              <div className="p-12 text-center text-xs text-[var(--sidebar-muted)] flex items-center justify-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-[var(--primary)]" />
+              <div className="p-12 text-center text-xs text-gray-600 dark:text-emerald-200/70 flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-600 dark:text-emerald-400" />
                 Loading message history...
               </div>
             ) : filteredLogs.length === 0 ? (
-              <div className="p-12 text-center text-xs text-[var(--sidebar-muted)]">
+              <div className="p-12 text-center text-xs text-gray-600 dark:text-emerald-200/70">
                 No SMS delivery records found.
               </div>
             ) : (
               <table className="w-full text-left text-xs">
-                <thead className="bg-[var(--row-alt)] border-b border-[var(--card-border)] text-[var(--sidebar-muted)]">
+                <thead className="bg-[var(--row-alt)] border-b border-[var(--card-border)] text-gray-700 dark:text-emerald-200/90 font-semibold">
                   <tr>
                     <th className="p-3 font-semibold">Date & Time</th>
                     <th className="p-3 font-semibold">Student & Section</th>
@@ -1060,7 +1106,7 @@ export default function MessagesHub() {
                     return (
                       <tr key={log.id} className="hover:bg-[var(--row-alt)] transition-colors">
                         {/* Date */}
-                        <td className="p-3 text-[var(--sidebar-muted)] whitespace-nowrap font-mono text-[11px]">
+                        <td className="p-3 text-gray-600 dark:text-emerald-200/80 whitespace-nowrap font-mono text-[11px]">
                           {new Date(log.created_at).toLocaleString('en-PH', {
                             month: 'short',
                             day: 'numeric',
@@ -1071,17 +1117,17 @@ export default function MessagesHub() {
                         </td>
 
                         {/* Student & Section */}
-                        <td className="p-3 font-medium text-[var(--body-text)]">
+                        <td className="p-3 font-medium text-gray-900 dark:text-emerald-100">
                           <div>{log.students?.full_name || 'Direct Recipient'}</div>
                           {log.students?.sections && (
-                            <div className="text-[10px] text-[var(--sidebar-muted)]">
+                            <div className="text-[10px] text-gray-500 dark:text-emerald-300/70">
                               {log.students.sections.grade_level} - {log.students.sections.name}
                             </div>
                           )}
                         </td>
 
                         {/* Phone */}
-                        <td className="p-3 font-mono text-[11px] text-[var(--sidebar-muted)] whitespace-nowrap">
+                        <td className="p-3 font-mono text-[11px] text-gray-700 dark:text-emerald-200 whitespace-nowrap">
                           {log.parent_phone || 'None'}
                         </td>
 
@@ -1089,18 +1135,18 @@ export default function MessagesHub() {
                         <td className="p-3 whitespace-nowrap">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             log.sms_type === 'broadcast'
-                              ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/20'
-                              : 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                              ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/20'
+                              : 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/20'
                           }`}>
                             {log.sms_type === 'broadcast' ? 'Broadcast' : 'Attendance'}
                           </span>
                         </td>
 
                         {/* Content */}
-                        <td className="p-3 max-w-xs truncate text-[var(--body-text)] font-sans" title={log.message_content}>
+                        <td className="p-3 max-w-xs truncate text-gray-900 dark:text-emerald-100 font-sans" title={log.message_content}>
                           <button
                             onClick={() => setSelectedLogPreview(log)}
-                            className="text-left truncate hover:underline hover:text-[var(--primary)] w-full block"
+                            className="text-left truncate hover:underline hover:text-emerald-600 dark:hover:text-emerald-400 w-full block"
                           >
                             {log.message_content}
                           </button>
@@ -1110,12 +1156,12 @@ export default function MessagesHub() {
                         <td className="p-3 whitespace-nowrap">
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${
                             statusLower === 'delivered'
-                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
                               : statusLower === 'sent'
-                              ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30'
+                              ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30'
                               : statusLower === 'queued'
-                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                              : 'bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30'
+                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+                              : 'bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/30'
                           }`}>
                             {statusLower === 'delivered' && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
                             {statusLower === 'sent' && <Check className="w-3 h-3 text-cyan-500" />}
@@ -1135,7 +1181,7 @@ export default function MessagesHub() {
                               <button
                                 onClick={() => handleRetryLog(log)}
                                 disabled={isRetrying}
-                                className="p-1.5 bg-[var(--row-alt)] hover:bg-[var(--card-border)] text-cyan-500 hover:text-cyan-400 rounded-lg transition-all"
+                                className="p-1.5 bg-[var(--row-alt)] hover:bg-[var(--card-border)] text-cyan-600 dark:text-cyan-400 rounded-lg transition-all"
                                 title="Retry sending via TextBee"
                               >
                                 <RotateCcw className={`w-3.5 h-3.5 ${isRetrying ? 'animate-spin' : ''}`} />
@@ -1144,8 +1190,8 @@ export default function MessagesHub() {
 
                             {/* Delete log */}
                             <button
-                              onClick={() => handleDeleteLog(log.id)}
-                              className="p-1.5 bg-[var(--row-alt)] hover:bg-red-500/20 text-[var(--sidebar-muted)] hover:text-red-400 rounded-lg transition-all"
+                              onClick={() => setDeleteTargetLogId(log.id)}
+                              className="p-1.5 bg-[var(--row-alt)] hover:bg-red-500/20 text-gray-500 hover:text-red-500 rounded-lg transition-all"
                               title="Delete record"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1167,49 +1213,49 @@ export default function MessagesHub() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-[var(--card-border)]">
-              <h3 className="font-bold text-sm text-[var(--body-text)] flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-[var(--primary)]" />
+              <h3 className="font-bold text-sm text-gray-900 dark:text-emerald-100 flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 Message Details
               </h3>
               <button
                 onClick={() => setSelectedLogPreview(null)}
-                className="text-xs p-1 rounded-lg text-[var(--sidebar-muted)] hover:text-[var(--body-text)]"
+                className="text-xs p-1 rounded-lg text-gray-500 dark:text-emerald-300 hover:text-gray-900 dark:hover:text-white"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-2 text-xs">
               <div className="flex justify-between py-1 border-b border-[var(--card-border)]">
-                <span className="text-[var(--sidebar-muted)]">Recipient</span>
-                <span className="font-semibold text-[var(--body-text)]">
+                <span className="text-gray-500 dark:text-emerald-200/70">Recipient</span>
+                <span className="font-semibold text-gray-900 dark:text-emerald-100">
                   {selectedLogPreview.students?.full_name || 'N/A'} ({selectedLogPreview.parent_phone})
                 </span>
               </div>
               <div className="flex justify-between py-1 border-b border-[var(--card-border)]">
-                <span className="text-[var(--sidebar-muted)]">Type</span>
-                <span className="font-semibold text-[var(--body-text)] capitalize">
+                <span className="text-gray-500 dark:text-emerald-200/70">Type</span>
+                <span className="font-semibold text-gray-900 dark:text-emerald-100 capitalize">
                   {selectedLogPreview.sms_type || 'attendance'}
                 </span>
               </div>
               <div className="flex justify-between py-1 border-b border-[var(--card-border)]">
-                <span className="text-[var(--sidebar-muted)]">Status</span>
-                <span className="font-semibold text-emerald-500 capitalize">
+                <span className="text-gray-500 dark:text-emerald-200/70">Status</span>
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400 capitalize">
                   {selectedLogPreview.status}
                 </span>
               </div>
               {selectedLogPreview.error_message && (
-                <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-[11px]">
+                <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-600 dark:text-red-400 text-[11px]">
                   <strong>Error details:</strong> {selectedLogPreview.error_message}
                 </div>
               )}
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-[var(--sidebar-muted)] mb-1">
+              <label className="block text-[11px] font-semibold text-gray-700 dark:text-emerald-200 mb-1">
                 Full Message Text
               </label>
-              <div className="p-3 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-xl text-xs font-mono text-[var(--body-text)] leading-relaxed select-all">
+              <div className="p-3 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-xl text-xs font-mono text-gray-900 dark:text-emerald-100 leading-relaxed select-all">
                 {selectedLogPreview.message_content}
               </div>
             </div>
@@ -1217,9 +1263,177 @@ export default function MessagesHub() {
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setSelectedLogPreview(null)}
-                className="px-4 py-2 bg-[var(--row-alt)] text-[var(--body-text)] rounded-xl font-semibold text-xs hover:bg-[var(--card-border)] transition-all"
+                className="px-4 py-2 bg-[var(--row-alt)] text-gray-800 dark:text-emerald-100 rounded-xl font-semibold text-xs hover:bg-[var(--card-border)] transition-all"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Modal: In-App Broadcast Confirmation Modal */}
+      {broadcastModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95">
+            {/* Header */}
+            <div className="flex items-center gap-3 pb-3 border-b border-[var(--card-border)]">
+              <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                <Megaphone className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-gray-900 dark:text-emerald-100">
+                  Confirm Bulk Broadcast
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-emerald-200/70">
+                  Review audience and delivery split before dispatching SMS.
+                </p>
+              </div>
+            </div>
+
+            {/* Recipient / Quota Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              <div className="p-3 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-xl text-center">
+                <div className="text-[10px] uppercase font-bold text-gray-500 dark:text-emerald-300/70">Total Selected</div>
+                <div className="text-lg font-bold text-gray-900 dark:text-emerald-100 font-mono">
+                  {selectionStats.validPhoneCount}
+                </div>
+              </div>
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center">
+                <div className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300">Sending Today</div>
+                <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                  {selectionStats.sendTodayCount}
+                </div>
+              </div>
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center col-span-2 sm:col-span-1">
+                <div className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-300">Queued for Tomorrow</div>
+                <div className="text-lg font-bold text-amber-600 dark:text-amber-400 font-mono">
+                  {selectionStats.queueTomorrowCount}
+                </div>
+              </div>
+            </div>
+
+            {/* Warning if queued */}
+            {selectionStats.queueTomorrowCount > 0 && (
+              <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <span>
+                  Due to the TextBee daily limit ({quota?.dailyLimit || 50} SMS/day), {selectionStats.queueTomorrowCount} messages will be queued. You can dispatch them tomorrow from the logs tab once the limit resets.
+                </span>
+              </div>
+            )}
+
+            {/* Sample Message Preview */}
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold text-gray-700 dark:text-emerald-200">
+                Personalized Preview Sample:
+              </div>
+              <div className="p-3 bg-[var(--row-alt)] border border-[var(--card-border)] rounded-xl text-xs font-mono text-gray-900 dark:text-emerald-100 leading-relaxed max-h-32 overflow-y-auto">
+                {previewSampleMessage}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setBroadcastModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl border border-[var(--card-border)] text-xs font-semibold text-gray-700 dark:text-emerald-200 hover:bg-[var(--row-alt)] transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setBroadcastModalOpen(false)
+                  executeSendBroadcast()
+                }}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+              >
+                <Send className="w-4 h-4" />
+                Confirm & Dispatch SMS
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. Modal: In-App Delete Confirmation Modal */}
+      {deleteTargetLogId && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-red-500/15 text-red-500">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-gray-900 dark:text-emerald-100">
+                  Delete SMS Log Record
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-emerald-200/70">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-600 dark:text-emerald-200/80 leading-relaxed">
+              Are you sure you want to permanently remove this SMS delivery receipt from the database?
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setDeleteTargetLogId(null)}
+                className="px-3.5 py-2 rounded-xl border border-[var(--card-border)] text-xs font-semibold text-gray-700 dark:text-emerald-200 hover:bg-[var(--row-alt)] transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const id = deleteTargetLogId
+                  setDeleteTargetLogId(null)
+                  executeDeleteLog(id)
+                }}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition-all active:scale-95"
+              >
+                Delete Record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9. Modal: In-App Dispatch Queued Confirmation Modal */}
+      {dispatchQueuedModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-500">
+                <Send className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-gray-900 dark:text-emerald-100">
+                  Dispatch Queued Messages
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-emerald-200/70">
+                  Send deferred announcements using available quota.
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-600 dark:text-emerald-200/80 leading-relaxed">
+              Dispatch <strong className="text-gray-900 dark:text-emerald-100">{queuedBatchCount}</strong> queued messages now? You currently have <strong className="text-emerald-600 dark:text-emerald-400 font-semibold">{quota ? Math.max(0, quota.dailyLimit - quota.processedSmsToday) : 50}</strong> slots remaining today on TextBee.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setDispatchQueuedModalOpen(false)}
+                className="px-3.5 py-2 rounded-xl border border-[var(--card-border)] text-xs font-semibold text-gray-700 dark:text-emerald-200 hover:bg-[var(--row-alt)] transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setDispatchQueuedModalOpen(false)
+                  executeDispatchQueued()
+                }}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs transition-all active:scale-95 flex items-center gap-1.5"
+              >
+                <Send className="w-3.5 h-3.5" />
+                Dispatch {queuedBatchCount} Messages
               </button>
             </div>
           </div>
