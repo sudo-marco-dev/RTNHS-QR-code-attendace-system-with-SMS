@@ -4,6 +4,7 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
+import { formatPhilippinePhoneNumber } from '../../lib/sms'
 
 interface Student {
   id: string
@@ -149,7 +150,7 @@ export default function StudentManager() {
       .update({
         full_name: editStudent.full_name,
         lrn: editStudent.lrn || null,
-        parent_phone: editStudent.parent_phone || null
+        parent_phone: formatPhilippinePhoneNumber(editStudent.parent_phone) || editStudent.parent_phone || null
       })
       .eq('id', editStudent.id)
 

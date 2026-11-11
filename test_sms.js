@@ -25,6 +25,19 @@ function loadEnv() {
 
 loadEnv();
 
+function formatPhilippinePhoneNumber(phone) {
+  if (!phone) return phone;
+  let cleaned = String(phone).trim().replace(/[\s\-\(\)\.]/g, '');
+  if (cleaned.startsWith('+0')) cleaned = cleaned.slice(1);
+  if (cleaned.startsWith('0063')) cleaned = '+63' + cleaned.slice(4);
+  if (cleaned.startsWith('+6309')) cleaned = '+63' + cleaned.slice(5);
+  if (/^\+639\d{9}$/.test(cleaned)) return cleaned;
+  if (/^639\d{9}$/.test(cleaned)) return '+' + cleaned;
+  if (/^09\d{9}$/.test(cleaned)) return '+63' + cleaned.slice(1);
+  if (/^9\d{9}$/.test(cleaned)) return '+63' + cleaned;
+  return cleaned;
+}
+
 const API_KEY = process.env.VITE_HTTPSMS_API_KEY;
 const SENDER_PHONE = process.env.VITE_HTTPSMS_SENDER_PHONE;
 
@@ -36,11 +49,12 @@ async function sendTestMessage(to) {
 
   if (!to) {
     console.error('Usage: node test_sms.js <destination_phone_number>');
-    console.error('Example: node test_sms.js +639123456789');
+    console.error('Example: node test_sms.js 09123456789 or +639123456789');
     return;
   }
 
-  console.log(`Sending test message to ${to} from ${SENDER_PHONE}...`);
+  const formattedTo = formatPhilippinePhoneNumber(to);
+  console.log(`Sending test message to ${formattedTo} (original: ${to}) from ${SENDER_PHONE}...`);
 
   try {
     const response = await fetch('https://api.httpsms.com/v1/messages/send', {
@@ -53,7 +67,7 @@ async function sendTestMessage(to) {
       body: JSON.stringify({
         content: 'This is a test message from the RTNHS QR Code Attendance System.',
         from: SENDER_PHONE,
-        to: to
+        to: formattedTo
       })
     });
 

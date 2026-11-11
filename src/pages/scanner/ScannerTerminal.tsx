@@ -9,7 +9,7 @@ import StateControls from '../../components/scanner/StateControls'
 import type { ScanWindow, WindowType } from '../../components/scanner/StateControls'
 import { playSuccess, playDuplicate, playError } from '../../components/scanner/AudioFeedback'
 import { Bug, QrCode, CheckCircle2, XCircle, Zap, Settings, Keyboard, History, Loader2, Maximize, Minimize, ArrowLeft, ShieldAlert, Lock, LockOpen } from 'lucide-react'
-import { sendAttendanceSms } from '../../lib/sms'
+import { sendAttendanceSms, formatPhilippinePhoneNumber } from '../../lib/sms'
 import { useNavigate } from 'react-router-dom'
 import ManualEntry from '../../components/scanner/ManualEntry'
 import ScanHistoryTab from '../../components/scanner/ScanHistoryTab'
@@ -552,7 +552,7 @@ export default function ScannerTerminal() {
               await supabase.from('sms_logs').insert({
                 attendance_log_id: logData.id,
                 student_id: student.id,
-                parent_phone: student.parent_phone,
+                parent_phone: formatPhilippinePhoneNumber(student.parent_phone) || student.parent_phone,
                 message_content: `[RTNHS Attendance] ${student.full_name} has ${windowType.includes('out') ? 'TIME OUT' : 'TIME IN'} at ${timeStr}. Date: ${dateStr} | ${sectionName}`,
                 status: smsResult
               });

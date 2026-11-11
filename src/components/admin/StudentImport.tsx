@@ -6,6 +6,7 @@ import { Button } from '../ui/Button'
 import { Select } from '../ui/Select'
 import { Input } from '../ui/Input'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/Tabs'
+import { formatPhilippinePhoneNumber } from '../../lib/sms'
 
 interface Section {
   id: string
@@ -110,9 +111,12 @@ export default function StudentImport() {
     const validRows: ParsedStudent[] = rows.map(row => {
       const mapped: ParsedStudent = { _tempId: crypto.randomUUID(), full_name: '', lrn: '', parent_phone: '' }
       for (const [originalKey, canonicalField] of Object.entries(headerMap)) {
-        const value = String(row[originalKey] ?? '').trim()
-        if (value && !(mapped as any)[canonicalField]) {
-          (mapped as any)[canonicalField] = value
+        const rawValue = String(row[originalKey] ?? '').trim();
+        if (rawValue && !(mapped as any)[canonicalField]) {
+          const finalVal: string = canonicalField === 'parent_phone'
+            ? (formatPhilippinePhoneNumber(rawValue) || rawValue)
+            : rawValue;
+          (mapped as any)[canonicalField] = finalVal;
         }
       }
       return mapped
@@ -227,7 +231,7 @@ export default function StudentImport() {
       section_id: selectedSection,
       full_name: student.full_name,
       lrn: student.lrn || null,
-      parent_phone: student.parent_phone,
+      parent_phone: formatPhilippinePhoneNumber(student.parent_phone) || student.parent_phone || null,
       qr_code: crypto.randomUUID()
     }))
 
@@ -261,7 +265,7 @@ export default function StudentImport() {
       section_id: selectedSection,
       full_name: singleStudent.full_name,
       lrn: singleStudent.lrn || null,
-      parent_phone: singleStudent.parent_phone,
+      parent_phone: formatPhilippinePhoneNumber(singleStudent.parent_phone) || singleStudent.parent_phone || null,
       qr_code: crypto.randomUUID()
     })
 
