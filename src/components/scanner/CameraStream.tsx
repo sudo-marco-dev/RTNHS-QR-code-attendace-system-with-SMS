@@ -76,8 +76,9 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
       if (!isRunning) return
 
       const detector = faceDetectorRef.current
-      // In dual cam mode, the student's face is on faceVideoRef. In single cam fallback, it is on deviceVideoRef.
-      const video = esp32Url ? faceVideoRef.current : deviceVideoRef.current
+      // In single-cam or debug mode, the face is on deviceVideoRef. In production dual-cam mode, on faceVideoRef.
+      const isSingleCam = !esp32Url || debug
+      const video = isSingleCam ? deviceVideoRef.current : faceVideoRef.current
 
       if (detector && video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
         try {
@@ -105,7 +106,7 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
       isRunning = false
       if (timeoutId) clearTimeout(timeoutId)
     }
-  }, [active, esp32Url, faceVerificationEnabled])
+  }, [active, esp32Url, debug, faceVerificationEnabled])
 
   // ---- Shared scan timing ----
   const lastScanTime = useRef<number>(0)
@@ -145,10 +146,21 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
   const deviceStreamRef = useRef<MediaStream | null>(null)
   const deviceAnimRef = useRef<number | null>(null)
   const [deviceError, setDeviceError] = useState<string | null>(null)
-  const facingModeRef = useRef<'environment' | 'user'>('environment')
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
+  const facingModeRef = useRef<'environment' | 'user'>(debug ? 'user' : 'environment')
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>(debug ? 'user' : 'environment')
   const [flipping, setFlipping] = useState(false)
   const flippingRef = useRef(false)
+
+  // In debug mode, automatically prefer user-facing webcam for face testing
+  useEffect(() => {
+    if (debug && facingModeRef.current !== 'user') {
+      facingModeRef.current = 'user'
+      setFacingMode('user')
+      if (active) {
+        startDeviceCamera('user')
+      }
+    }
+  }, [debug, active])
 
   // ---- Face Stream (phone camera for verification photo — only in active production with ESP32) ----
   const faceVideoRef = useRef<HTMLVideoElement>(null)
@@ -350,7 +362,7 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
   // ---- Expose face photo capture and biometric verification state to parent ----
   useImperativeHandle(ref, () => ({
     captureFacePhoto: (): string | null => {
-      const video = esp32Url ? faceVideoRef.current : deviceVideoRef.current
+      const video = (!esp32Url || debug) ? deviceVideoRef.current : faceVideoRef.current
       const canvas = faceCanvasRef.current || deviceCanvasRef.current
       if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
         return null
@@ -433,7 +445,7 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
   useEffect(() => {
     setEsp32Error(null)
     setEsp32FrameOk(false)
-    if (!active || !esp32Url) {
+    if (!active || !esp32Url || debug) {
       esp32Polling.current = false
       return
     }
@@ -490,9 +502,9 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
     setFlipping(false)
   }, [startDeviceCamera])
 
-  // Start device camera when active AND no ESP32
+  // Start device camera when active AND (no ESP32 OR in debug mode)
   useEffect(() => {
-    if (!active || esp32Url) {
+    if (!active || (esp32Url && !debug)) {
       if (deviceAnimRef.current) cancelAnimationFrame(deviceAnimRef.current)
       deviceStreamRef.current?.getTracks().forEach(t => t.stop())
       deviceStreamRef.current = null
@@ -511,7 +523,7 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
       deviceStreamRef.current?.getTracks().forEach(t => t.stop())
       deviceStreamRef.current = null
     }
-  }, [active, esp32Url, scanDeviceFrame, startDeviceCamera])
+  }, [active, esp32Url, debug, scanDeviceFrame, startDeviceCamera])
 
   // ======================================================================
   // Face Camera (verification photo — only in active production when ESP32 is QR source)
@@ -551,8 +563,8 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
   }
 
   useEffect(() => {
-    // Suspend face camera if not active or if no ESP32
-    if (!active || !esp32Url) {
+    // Suspend secondary face camera if not active, or if no ESP32, or if in debug mode
+    if (!active || !esp32Url || debug) {
       faceStreamRef.current?.getTracks().forEach(t => t.stop())
       faceStreamRef.current = null
       setFaceActive(false)
@@ -564,7 +576,7 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
       faceStreamRef.current = null
       setFaceActive(false)
     }
-  }, [active, esp32Url, startFaceCamera])
+  }, [active, esp32Url, debug, startFaceCamera])
 
   // Ensure face video element stays attached
   useEffect(() => {
@@ -580,8 +592,8 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
   // RENDER
   // ======================================================================
 
-  // MODE B: No ESP32 — single device camera for QR
-  if (!esp32Url) {
+  // MODE B: Single device camera (when no ESP32 OR when in debug mode)
+  if (!esp32Url || debug) {
     return (
       <div className="relative w-full h-full overflow-hidden bg-black flex items-center justify-center">
         {deviceError ? (
@@ -606,19 +618,27 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
           </div>
         ) : (
           <>
-            <video ref={deviceVideoRef} className="w-full h-full object-cover" muted playsInline />
+            <video
+              ref={deviceVideoRef}
+              className="w-full h-full object-cover"
+              muted
+              playsInline
+              style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
+            />
             <FaceDetectionOverlay
               result={faceValidationResult}
               enabled={!!faceVerificationEnabled}
               mirrored={facingMode === 'user'}
+              debug={debug}
             />
           </>
         )}
         <canvas ref={deviceCanvasRef} className="hidden" />
 
         {debug && (
-          <div className="absolute top-3 left-3 z-10 px-2.5 py-1 bg-amber-500/90 text-black text-xs font-bold rounded-full flex items-center gap-1 backdrop-blur-sm">
-            <Bug className="w-3.5 h-3.5" /> DEBUG
+          <div className="absolute top-4 left-4 z-20 px-3 py-1.5 bg-amber-500 text-black text-xs font-bold rounded-full flex items-center gap-1.5 backdrop-blur-md shadow-xl pointer-events-none">
+            <Bug className="w-4 h-4" />
+            <span>Face & QR Test Mode (Single Camera)</span>
           </div>
         )}
 
@@ -626,34 +646,34 @@ const CameraStream = forwardRef<CameraStreamHandle, Props>(function CameraStream
           type="button"
           onClick={flipCamera}
           disabled={flipping || !!deviceError}
-          className="absolute top-3 right-3 z-10 p-2.5 bg-black/50 backdrop-blur-sm text-white rounded-full hover:bg-black/70 transition-colors disabled:opacity-50"
-          title={facingMode === 'environment' ? 'Switch to Front Camera' : 'Switch to Rear Camera'}
+          className="absolute top-4 right-4 z-20 p-2.5 bg-black/60 backdrop-blur-md text-white rounded-full hover:bg-black/80 transition-all shadow-xl active:scale-95 disabled:opacity-50 border border-white/10"
+          title={facingMode === 'environment' ? 'Switch to Front Camera (Face Testing)' : 'Switch to Rear Camera'}
         >
           {flipping ? <Loader2 className="w-5 h-5 animate-spin" /> : <SwitchCamera className="w-5 h-5" />}
         </button>
 
-        {/* Scan targeting overlay */}
+        {/* Scan targeting overlay — unobtrusive in debug mode so face is unobstructed */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="relative">
             <div
-              className={`w-52 h-52 border-2 ${scanBorder} rounded-lg`}
-              style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}
+              className={`w-52 h-52 border-2 ${debug ? 'border-amber-400/40 border-dashed' : scanBorder} rounded-lg`}
+              style={{ boxShadow: debug ? undefined : '0 0 0 9999px rgba(0,0,0,0.45)' }}
             />
-            {[
+            {!debug && [
               'top-0 left-0 border-t-4 border-l-4 rounded-tl',
               'top-0 right-0 border-t-4 border-r-4 rounded-tr',
               'bottom-0 left-0 border-b-4 border-l-4 rounded-bl',
               'bottom-0 right-0 border-b-4 border-r-4 rounded-br'
             ].map((cls, i) => (
-              <div key={i} className={`absolute w-6 h-6 ${debug ? 'border-amber-400' : 'border-blue-400'} ${cls}`} />
+              <div key={i} className={`absolute w-6 h-6 ${scanBorder} ${cls}`} />
             ))}
           </div>
         </div>
 
-        <div className="absolute bottom-3 left-0 right-0 text-center">
-          <span className="text-xs text-white/70 bg-black/40 px-3 py-1 rounded-full">
+        <div className="absolute bottom-24 left-0 right-0 text-center pointer-events-none z-10">
+          <span className="text-xs text-white/90 bg-black/60 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/10 shadow-lg">
             {debug
-              ? 'Debug mode — no attendance recorded'
+              ? `Face Testing Mode • ${facingMode === 'user' ? 'Front' : 'Rear'} Camera • Face camera while showing QR`
               : `Point camera at QR code • ${facingMode === 'environment' ? 'Rear' : 'Front'} camera`}
           </span>
         </div>

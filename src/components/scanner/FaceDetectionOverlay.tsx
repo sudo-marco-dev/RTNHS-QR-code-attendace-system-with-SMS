@@ -6,9 +6,10 @@ interface Props {
   result: FaceValidationResult | null
   enabled: boolean
   mirrored?: boolean
+  debug?: boolean
 }
 
-export default function FaceDetectionOverlay({ result, enabled, mirrored = false }: Props) {
+export default function FaceDetectionOverlay({ result, enabled, mirrored = false, debug = false }: Props) {
   if (!enabled) return null
 
   const status = result?.status || 'NO_FACE'
@@ -108,10 +109,18 @@ export default function FaceDetectionOverlay({ result, enabled, mirrored = false
           />
 
           {/* Biometric Status Tag anchored over box */}
-          <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap">
-            <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold border backdrop-blur-md shadow-lg flex items-center gap-1 ${theme.badgeBg}`}>
+          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap">
+            <div className={`px-2.5 py-1 rounded-md text-[10px] font-bold border backdrop-blur-md shadow-lg flex items-center gap-1.5 ${theme.badgeBg}`}>
               {theme.icon}
-              <span>{isVerified ? 'Face Verified' : status === 'FACING_AWAY' ? 'Look at Camera' : 'Align Face'}</span>
+              <span>
+                {isVerified ? 'Face Verified' : status === 'FACING_AWAY' ? 'Look at Camera' : 'Align Face'}
+              </span>
+              {debug && (
+                <span className="font-mono text-[9px] opacity-80 border-l border-white/20 pl-1.5 ml-0.5">
+                  {Math.round((result?.confidence || 0) * 100)}% conf
+                  {result?.yawAsymmetry !== undefined ? ` • yaw ${result.yawAsymmetry.toFixed(2)}` : ''}
+                </span>
+              )}
             </div>
           </div>
         </div>

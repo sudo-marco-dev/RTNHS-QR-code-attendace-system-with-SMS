@@ -407,9 +407,12 @@ export default function ScannerTerminal() {
     feedbackTimer.current = setTimeout(() => setFeedback(null), 3000)
   }
 
-  // Debug mode: validate locally, show on-screen result, auto-dismiss, and notify ESP32 OLED
+  // Debug mode: validate locally, test face verification, show on-screen result, auto-dismiss, and notify ESP32 OLED
   const processDebugCode = useCallback((code: string) => {
+    const isFaceOk = !faceVerificationEnabled || (cameraStreamRef.current?.isFaceVerified() ?? true)
+    const faceResult = cameraStreamRef.current?.getFaceResult()
     const student = students.find(s => s.qr_code === code || s.lrn === code)
+
     setDebugResult({
       rawPayload: code,
       found: !!student,
@@ -417,16 +420,40 @@ export default function ScannerTerminal() {
     })
 
     if (debugTimer.current) clearTimeout(debugTimer.current)
-    debugTimer.current = setTimeout(() => setDebugResult(null), 3500)
+    debugTimer.current = setTimeout(() => setDebugResult(null), 4000)
+
+    if (!isFaceOk) {
+      playError()
+      showFeedback({
+        studentName: student?.full_name || 'Debug Test',
+        lrn: code,
+        status: 'ERROR',
+        message: `Face Gated [${faceResult?.status || 'NO_FACE'}]: ${faceResult?.message || 'Please face camera directly.'}`
+      })
+      notifyEspScreen('error', 'Face Camera', 'Look at Lens', 'ERR', 'Face Required')
+      return
+    }
 
     if (student) {
       playSuccess()
+      showFeedback({
+        studentName: student.full_name,
+        lrn: student.lrn,
+        status: 'PRESENT',
+        message: `[DEBUG PASS] Face Verified ✓ (${Math.round((faceResult?.confidence || 0) * 100)}% conf)`
+      })
       notifyEspScreen('scanned', student.full_name, student.lrn, 'DBG')
     } else {
-      playError()
+      playSuccess()
+      showFeedback({
+        studentName: 'Face OK (Unregistered QR)',
+        lrn: code,
+        status: 'DUPLICATE',
+        message: `[DEBUG PASS] Face Verified ✓ (${Math.round((faceResult?.confidence || 0) * 100)}% conf)`
+      })
       notifyEspScreen('error', 'Unknown QR', code, 'ERR', 'Not in Section')
     }
-  }, [students, notifyEspScreen])
+  }, [students, notifyEspScreen, faceVerificationEnabled])
 
   const processCode = useCallback(async (code: string) => {
     // Prevent any scanning if we are still fetching the previous state from Supabase
@@ -818,15 +845,25 @@ export default function ScannerTerminal() {
 
       {/* 3. Debug Overlay */}
       {debugMode && debugResult && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-20 w-[90%] max-w-md pointer-events-none">
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-30 w-[90%] max-w-md pointer-events-none animate-in fade-in zoom-in-95">
            <div className={`p-4 backdrop-blur-xl rounded-2xl shadow-2xl border ${
-             debugResult.found ? 'bg-emerald-950/80 border-emerald-500/50' : 'bg-red-950/80 border-red-500/50'
+             debugResult.found ? 'bg-emerald-950/90 border-emerald-500/50' : 'bg-red-950/90 border-red-500/50'
            }`}>
-             <div className="text-sm font-bold text-white mb-2 flex items-center gap-2">
-               <Bug className="w-4 h-4" /> Debug: {debugResult.found ? 'Valid' : 'Invalid'}
+             <div className="text-sm font-bold text-white mb-2 flex items-center justify-between">
+               <span className="flex items-center gap-2">
+                 <Bug className="w-4 h-4 text-amber-400" />
+                 <span>Debug Scan: {debugResult.found ? 'Valid Student' : 'Unregistered QR'}</span>
+               </span>
+               <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
+                 cameraStreamRef.current?.isFaceVerified()
+                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                   : 'bg-red-500/20 text-red-300 border border-red-500/30'
+               }`}>
+                 {cameraStreamRef.current?.isFaceVerified() ? 'FACE PASS ✓' : 'FACE BLOCKED ✕'}
+               </span>
              </div>
-             <div className="text-xs text-white/70 font-mono break-all mb-2">{debugResult.rawPayload}</div>
-             <div className="text-xs text-white/90">Match: {debugResult.student?.full_name || 'None'}</div>
+             <div className="text-xs text-white/70 font-mono break-all mb-1">{debugResult.rawPayload}</div>
+             <div className="text-xs text-white font-semibold">Match: {debugResult.student?.full_name || 'None'}</div>
            </div>
         </div>
       )}
